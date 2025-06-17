@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, type Ref } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import VueApexCharts from 'vue3-apexcharts';
 import type { ApexOptions } from 'apexcharts';
 import type {
@@ -7,7 +7,7 @@ import type {
     SmaBestParams,
     RsiBestParams,
     McResultData
-} from '../types/simulation';
+} from '../types/common_strategy_types';
 
 // Props definisjon (som før)
 const props = defineProps<{

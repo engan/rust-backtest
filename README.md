@@ -1,26 +1,18 @@
-# Proprietary Backtesting & Strategy Engine for mc-simulations
+# High-Performance Trading Backtester (Rust/Wasm)
 
-[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
 
-This repository contains the proprietary core logic for high-performance backtesting, strategy implementations, and advanced quantitative analysis. Written in Rust and compiled to WebAssembly (Wasm), this engine delivers robust and accurate computations for trading strategy simulations.
+This repository hosts a high-performance web-based dashboard for backtesting trading strategies, built with Vue.js (frontend) and a powerful Rust/WebAssembly (Wasm) computation engine. It aims to provide accurate backtesting, robust validation, and efficient parameter optimization capabilities.
 
-This engine serves as the high-performance "brain" for the public [mc-simulations](https://github.com/engan/mc-simulations) frontend dashboard. The source code herein is private and considered intellectual property.
+### About the Engine's Core Logic
 
-## Overview
-
-The primary purpose of this project is to provide a powerful, accurate, and extensible engine to:
-
-1.  **Backtest** complex, quantitative trading strategies against extensive historical data with high precision.
-2.  **Optimize** strategy parameters to identify the most promising and effective settings.
-3.  **Validate** the robustness and statistical significance of strategies through advanced methods, including Monte Carlo simulations.
-
-The system is built on a modular and maintainable architecture, designed to facilitate the seamless addition of new indicators, diverse trading strategies, and sophisticated risk management modules.
+The core backtesting, strategy implementations, and advanced quantitative analysis logic for this dashboard are developed and maintained in a separate, **private repository**: [`engan/rust-backtest-proprietary`](https://github.com/engan/rust-backtest-proprietary). This separation protects the intellectual property of the engine's core algorithms.
 
 ![Image](https://github.com/user-attachments/assets/9e0f3b50-84e5-49d7-a0f8-cca0decf3f41)
 
 _Image: Performance validation of the Minimal SMA Crossover strategy, showcasing the Rust/Wasm engine's results against TradingView. Key metrics like Total P&L, Total Trades, Profitable Trades, and Profit Factor demonstrate near-identical replication, affirming the engine's accuracy and reliability._
 
-### Note on Result Fidelity
+#### Note on Result Fidelity
 
 While core metrics like Total P&L, Total Trades, Profitable Trades (%), and Profit Factor consistently show near-identical or exact matches with TradingView's Strategy Tester, minor discrepancies in "Max Drawdown" (typically within ~1-5 percentage points) are observed. These marginal differences are attributed to:
 
@@ -29,88 +21,127 @@ While core metrics like Total P&L, Total Trades, Profitable Trades (%), and Prof
 
 Despite these minor deviations, the engine's core trade execution, P&L attribution, and overall strategy performance metrics are validated to be highly accurate, providing a reliable foundation for strategy development and analysis.
 
+## Features ✨
+
+-   **High-Performance Backtesting:** Utilizes a Rust/Wasm engine for rapid and accurate strategy execution.
+-   **Parameter Optimization:** Efficiently identifies effective parameter sets for chosen strategies via grid search.
+-   **Robustness Validation:** Evaluates strategy performance through Monte Carlo simulations over numerous price paths.
+-   **Data Fetching:** Loads historical K-line (candlestick) data from Binance Spot API, including extended history and rate-limit handling.
+-   **Configurable Costs:** Includes realistic simulation of commission and slippage.
+-   **Responsive UI:** Interactive dashboard built with Vue 3 (Composition API) and TypeScript.
+-   **Visualization:** Displays P/L and Max Drawdown histograms via ApexCharts.
+-   **Web Worker Integration:** Offloads intensive computations to Web Workers for a smooth user experience.
+
 ## Technology Stack 🛠️
 
--   **Core Language:** [Rust](https://www.rust-lang.org/) (stable toolchain) - Chosen for its performance, memory safety, and concurrency features.
--   **Compilation Target:** [WebAssembly (Wasm)](https://webassembly.org/) - Enables near-native execution speeds directly in the web browser.
--   **Build Tool:** [wasm-pack](https://rustwasm.github.io/wasm-pack/) - Facilitates the creation of Wasm packages compatible with JavaScript environments.
--   **Package Manager:** [Cargo](https://doc.rust-lang.org/cargo/) - Rust's official build system and package manager.
--   **JS Interop:** [wasm-bindgen](https://rustwasm.github.io/wasm-bindgen/) - Provides seamless interoperability between Rust and JavaScript.
--   **Serialization:** [Serde](https://serde.rs/) - A powerful framework for serializing and deserializing Rust data structures efficiently.
+-   **Frontend:** [Vue 3](https://vuejs.org/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/), [Vue3 ApexCharts](https://github.com/apexcharts/vue3-apexcharts), [pnpm](https://pnpm.io/)
+-   **Core Engine:** [Rust](https://www.rust-lang.org/), [WebAssembly (Wasm)](https://webassembly.org/), [wasm-pack](https://rustwasm.github.io/wasm-pack/), [Serde](https://serde.rs/)
+-   **Data Source:** [Binance API](https://binance-docs.github.io/apidocs/spot/en/) (via Cloudflare Pages Function proxy)
 
 ## Project Structure 📁
 
-The architectural design emphasizes modularity and separation of concerns, ensuring a maintainable and scalable codebase.
+This repository primarily contains the frontend application and deployment-related functions.
 
 ```text
-mc-simulations-proprietary/
-├── src/
-│   ├── lib.rs                  # Main entry point for the Wasm module; exposes core functions to JavaScript.
-│   ├── types.rs                # Defines fundamental data structures for market data (Kline), trade records (Trade), and simulation results (BacktestResult, BacktestSummary).
-│   │
-│   ├── indicators/             # Contains implementations of various technical indicators, designed for reusability.
-│   │   ├── mod.rs              # Module declaration file for indicators.
-│   │   ├── sma.rs              # Simple Moving Average (SMA) calculation.
-│   │   ├── ema.rs              # Exponential Moving Average (EMA) calculation.
-│   │   ├── vwap.rs             # Volume Weighted Average Price (VWAP) calculation.
-│   │   ├── atr.rs              # Average True Range (ATR) calculation.
-│   │   └── dmi.rs              # Directional Movement Index (DMI) calculation.
-│   │
-│   ├── strategies/                   # Houses the logic for specific trading strategies.
-│   │   ├── mod.rs                    # Module declaration file for strategies.
-│   │   ├── sma_crossover_strategy.rs # Implementation of the SMA Crossover strategy.
-│   │   ├── ema_vwap_strategy.rs      # Future implementation for the EMA/VWAP Crossover strategy.
-│   │   ├── risk_management.rs        # Core logic for universal risk management rules (e.g., stop-loss, position sizing).
-│   │   └── other_strategy.rs         # Placeholder for additional proprietary trading strategies.
-│   │
-│   ├── simulation_engine/      # Contains the core backtesting and simulation machinery.
-│   │   ├── mod.rs              # Module declaration file for the simulation engine.
-│   │   ├── backtest.rs         # Implements the bar-by-bar backtesting algorithm.
-│   │   └── monte_carlo.rs      # Logic for generating simulated price paths and running Monte Carlo validations.
-│   │
-│   └── optimization/           # Dedicated module for parameter optimization algorithms.
-│       ├── mod.rs              # Module declaration file for optimization.
-│       ├── grid_search.rs      # Implements grid search for parameter optimization.
-│       └── genetic_algo.rs     # (Optional) Future implementation for more advanced genetic algorithms.
+rust-backtest/
+├── frontend/             # The Vue.js Frontend Application
+│   ├── public/           # Static assets
+│   ├── src/              # Frontend source code (Vue components, Composables, Services, Types, Router, etc.)
+│   │   ├── App.vue
+│   │   ├── main.ts
+│   │   ├── assets/
+│   │   ├── components/
+│   │   ├── composables/
+│   │   ├── router/
+│   │   ├── rust/pkg/     # Compiled Wasm module artifacts from the private engine
+│   │   ├── services/
+│   │   ├── types/
+│   │   ├── views/
+│   │   └── workers/
+│   ├── index.html
+│   ├── package.json      # Frontend-specific package manifest
+│   ├── vite.config.ts    # Vite build & dev server config
+│   └── ...               # Other frontend config files (tsconfig, eslint, etc.)
 │
-├── pkg/                        # Automatically generated directory by `wasm-pack`, containing the compiled Wasm module and JavaScript bindings.
-├── tests/                      # Rust's integration tests to ensure the correctness and integrity of the core logic.
-├── Cargo.toml                  # Rust project manifest, detailing package information and dependencies.
-└── README.md                   # This documentation file.
+├── functions/            # Cloudflare Pages Functions (e.g., API proxy)
+│   └── binance-proxy/
+│       └── [[path]].ts   # Proxy logic for Binance API
+│
+├── .gitignore            # Git ignore rules for this repository
+├── package.json          # Root package manifest (for pnpm workspaces)
+├── pnpm-lock.yaml        # pnpm lockfile
+└── README.md             # This documentation file
 ```
 
-## Build and Development Workflow
+Getting Started 🚀
+------------------
 
-This engine is designed to be compiled into a WebAssembly module, which is then consumed by a separate frontend application (specifically, the mc-simulations project).
+### Prerequisites
 
-### 1\. Build the Wasm Package
+*   [Node.js](https://www.google.com/url?sa=E&q=https://nodejs.org/) (LTS version recommended) and [pnpm](https://www.google.com/url?sa=E&q=https://pnpm.io/installation)
+    
+*   Basic understanding of [Rust](https://www.google.com/url?sa=E&q=https://www.rust-lang.org/) and [Vue 3](https://www.google.com/url?sa=E&q=https://vuejs.org/)
+    
 
-To compile the Rust code into a WebAssembly package that can be used in a web environment, navigate to the root directory of this repository and run the following command:
+### Installation & Running (Local Development)
 
-```bash
-wasm-pack build --target web 
-```
-This command will generate a pkg/ directory. This directory will contain the essential .wasm binary, along with .js and .d.ts files that serve as JavaScript bindings and TypeScript declarations for the Wasm module.
+1.  Clone this repository:
+     ```bash
+    git clone https://github.com/engan/rust-backtest.git
+    cd rust-backtest
+    ```
+    
+2.  **Build the Rust/Wasm Engine (from the private repository):**
+    
+    *   First, clone the private engine repository to a sibling directory:
+        ```bash
+        cd .. # Go up to the 'trading' directory
+        git clone https://github.com/engan/rust-backtest-proprietary.git # This will require authentication
+        cd rust-backtest-proprietary
+        ```
+    *   Build the Wasm package from the private engine:
+        ```bash
+        wasm-pack build --target web
+        ```
+        
+    *   Copy the compiled Wasm artifacts into this frontend project:
+        ```bash
+        cp ./pkg/*.{js,wasm,d.ts} ../rust-backtest/frontend/src/rust/pkg/
+        ```
+        
+    *   Go back to the root of this project:
+        ```bash
+        cd ../rust-backtest
+        ```
+        
+3.  Install Frontend Dependencies:
+    ```bash
+    pnpm install
+    ```
+    
+4.  Run the Frontend Development Server:
+    ```bash
+    pnpm run dev # Or 'pnpm --filter frontend run dev' if you prefer specifying the workspace filter
+    ```
+    Open your browser and navigate to the local URL provided by Vite (typically http://localhost:5173). The Vite proxy will handle Binance API calls during development.
+    
 
-### 2\. Integrate with the Frontend
+Deployment (Cloudflare Pages)
+-----------------------------
 
-Once the Wasm package is built, its compiled artifacts need to be integrated into the frontend project (mc-simulations).
+The project is configured for automatic deployment via GitHub Actions upon pushing to the main branch.
 
-1. Copy the essential artifacts: Transfer only the necessary .js, .wasm, and .d.ts files from mc-simulations-proprietary/pkg/ to the designated asset directory within the frontend project. This approach ensures that only compiled binaries, not the private source code, are exposed.
-```bash
-# From the root of mc-simulations-proprietary/
-cp ./pkg/*.{js,wasm,d.ts} ../mc-simulations/frontend/src/rust/pkg/
-```
-2. Import and consume in TypeScript/JavaScript:
-The Wasm module can then be initialized and its exposed functions can be called from within the frontend's TypeScript/JavaScript code (e.g., in Web Workers or Vue Composables):
-```bash
-// Replace 'run_backtest_function_name' with actual function
-import init, { run_backtest_function_name } from '@/rust/pkg/mc_simulations_proprietary.js'; 
+*   **Static Assets:** Built by Vite (using base: '/') and placed in frontend/dist.
+    
+*   **SPA Routing:** Handled by the frontend/public/\_routes.json file.
+    
+*   **API Proxy:** The Cloudflare Pages Function (functions/binance-proxy/\[[path]]\.ts) acts as a proxy, routing requests to the official Binance API and adding necessary CORS headers.
+    
 
-await init(); // Initialize the Wasm module; this must be called once.
-const results = run_backtest_function_name(...); // Invoke Rust logic
-```
+License 📄
+----------
 
-## License 📄
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/url?sa=E&q=LICENSE.md) file for details.
 
-This source code is proprietary and is licensed privately. All use, distribution, or copying without explicit permission is prohibited. See LICENSE.md for details.
+----------
+Feel free to contribute or report issues!

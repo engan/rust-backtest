@@ -1,14 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useKlines } from '../composables/useKlines';
-// --- IMPORTER SENTRALE TYPER ---
 import type {
     TopResultItem,
-    OptimizationStrategyInfo, 
-    // SmaOptimizationParams, 
-    // RsiOptimizationParams,
-    // ParameterRange 
-} from '../types/simulation'; // <-- Importer fra ny fil
+    OptimizationStrategyInfo
+} from '../types/common_strategy_types';
 
 // --- OPPDATER Lokal type for emit ---
 type StartMcTriggerPayload = {
