@@ -1,61 +1,120 @@
 import { ref } from 'vue';
 import { useKlines } from '@/composables/useKlines';
 import type { BacktestResult, BacktestConfig } from '@/types/common_strategy_types';
+import type { EmaVwapParams, SmaParams, MiniSmaParams } from '@/types/common_strategy_types';
 
-let wasm: typeof import('@/rust/pkg/rust_backtest_proprietary'); // Justert for det nye repo-navnet
+type WasmModule = typeof import('@/rust/pkg/rust_backtest_proprietary');
+let wasm: WasmModule | undefined;
 
-// Endre navnet på funksjonen
-export function useBacktest() { 
+/* ------------------------------------------------------------------ */
+/* 1)  initWasm                                                       */
+/* ------------------------------------------------------------------ */
+const initWasm = async (): Promise<WasmModule> => {
+  if (!wasm) {
+    // NB: identisk sti som i type-aliaset (men .js-suffiks fordi det er runtime)
+    const mod = await import('@/rust/pkg/rust_backtest_proprietary.js');
+    await mod.default();           // intialiser wasm-bindingene
+    wasm = mod;                    // husk i modul-cache
+  }
+  return wasm!;                    // non-null assertion ✔
+};
+
+/* ------------------------------------------------------------------ */
+/* 2)  composable-API                                                 */
+/* ------------------------------------------------------------------ */
+export function useBacktest() {
   const isLoading = ref(false);
   const { klines, isLoading: klinesAreLoading, error, loadKlines } = useKlines();
 
-  const initWasm = async () => {
-    if (!wasm) {
-      // Pass på at denne stien stemmer med navnet på wasm-filene
-      wasm = await import('@/rust/pkg/rust_backtest_proprietary.js'); 
-      await wasm.default();
-    }
-    return wasm;
-  };
-
-  const runSmaCrossoverBacktest = async (options: {
+  /* ------------ SMA (Full) ---------------------------------------- */
+  const runSmaCrossoverBacktest = async (opt: {
     symbol: string;
     interval: string;
     limit: number;
     initialCapital: number;
     config: BacktestConfig;
-    fastPeriod: number;
-    slowPeriod: number;
+    params: SmaParams;
   }): Promise<BacktestResult> => {
     isLoading.value = true;
     try {
-      const wasmInstance = await initWasm();
-      await loadKlines(options.symbol, options.interval, options.limit);
-      
-      if (klinesAreLoading.value || !klines.value || klines.value.length === 0 || error.value) {
-        throw new Error('Could not fetch klines from Binance API or an error occurred.');
-      }
+      const wasmInst = await initWasm();
+      await loadKlines(opt.symbol, opt.interval, opt.limit);
 
-      const results = wasmInstance.run_sma_crossover_backtest(
+      if (error.value) throw new Error(error.value);
+      if (!klines.value.length) throw new Error('No klines returned from API.');
+
+      return wasmInst.run_sma_crossover_backtest(
         klines.value,
-        options.initialCapital,
-        options.fastPeriod,
-        options.slowPeriod,
-        options.config.commission_percent,
-        options.config.slippage_ticks,
-        options.config.tick_size
-      );
-      return results as BacktestResult;
-    } catch (e) {
-      console.error('Error in runBacktest:', e);
-      throw e;
+        opt.config,
+        opt.initialCapital,
+        opt.params,
+      ) as BacktestResult;
     } finally {
       isLoading.value = false;
     }
   };
 
-  return {
-    isLoading,
-    runSmaCrossoverBacktest,
+    /* ------------ SMA (Mini) - NYTT ------------------------------ */
+  const runSmaCrossoverMiniBacktest = async (opt: {
+    symbol: string;
+    interval: string;
+    limit: number;
+    initialCapital: number;
+    config: BacktestConfig;
+    params: MiniSmaParams; // Bruker den nye, enkle typen
+  }): Promise<BacktestResult> => {
+    isLoading.value = true;
+    try {
+      const wasmInst = await initWasm();
+      await loadKlines(opt.symbol, opt.interval, opt.limit);
+
+      if (error.value) throw new Error(error.value);
+      if (!klines.value?.length) throw new Error('No klines returned from API.');
+
+      // Kaller den nye Wasm-funksjonen
+      return wasmInst.run_sma_crossover_mini_backtest(
+        klines.value,
+        opt.config,
+        opt.initialCapital,
+        opt.params,
+      ) as BacktestResult;
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  /* ------------ EMA/VWAP ------------------------------------------ */
+  const runEmaVwapBacktest = async (opt: {
+    symbol: string;
+    interval: string;
+    limit: number;
+    initialCapital: number;
+    config: BacktestConfig;
+    params: EmaVwapParams;
+  }): Promise<BacktestResult> => {
+    isLoading.value = true;
+    try {
+      const wasmInst = await initWasm();
+      await loadKlines(opt.symbol, opt.interval, opt.limit);
+
+      if (error.value) throw new Error(error.value);
+      if (!klines.value.length) throw new Error('No klines returned from API.');
+
+      return wasmInst.run_ema_vwap_strategy(
+        klines.value,
+        opt.config,
+        opt.initialCapital,
+        opt.params,
+      ) as BacktestResult;
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  return { 
+    isLoading, 
+    runSmaCrossoverBacktest, 
+    runEmaVwapBacktest, 
+    runSmaCrossoverMiniBacktest
   };
 }

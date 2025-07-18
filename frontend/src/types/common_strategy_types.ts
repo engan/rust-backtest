@@ -23,6 +23,20 @@ export interface Trade {
   pnl?: number;
 }
 
+export interface TradeEvent {
+  trade_id: number;
+  bar_index: number;
+  timestamp: number;
+  event_type: string; // 'Entry' | 'Exit'
+  direction: 'long' | 'short'; 
+  signal: string;
+  price: number;
+  qty: number;
+  pnl?: number;
+  run_up_amount?: number;
+  drawdown_amount?: number;  
+}
+
 export interface EquityPoint {
   timestamp: number;
   equity: number;
@@ -32,6 +46,7 @@ export interface BacktestConfig {
   commission_percent: number;
   slippage_ticks: number;
   tick_size: number;
+  step_size: number;
 }
 
 export interface BacktestSummary {
@@ -41,16 +56,108 @@ export interface BacktestSummary {
   profit_factor: number;
   total_trades: number;
   profitable_trades: number;
+  max_drawdown_amount: number;
+  net_profit: number;
+  open_pnl: number;
 }
 
 export interface BacktestResult {
-  trades: Trade[];
+  // trades: Trade[];
+  trade_log: TradeEvent[]; // Endret fra `trades`
   equity_curve: EquityPoint[];
   summary: BacktestSummary;
 }
 
+// Typer for SMA Crossover Strategi ---
+export interface SmaParams {
+  fast_period: number;
+  slow_period: number;
+  sl_tp_method: SlTpMethod;
+  atr_length: number;
+  reward_mult_rb: number;
+  atr_mult_rb: number;
+  fixed_sl_perc: number;
+  fixed_tp_perc: number;
+  trailing_sl_perc: number;
+  fixed_tp_for_trailing_perc: number;
+  risk_gearing: number,
+  risk_perc: number; 
+  fixed_qty?: number; 
+}
+
+// NYTT: Definer typen for de minimale parameterne.
+export interface MiniSmaParams {
+  fast_period: number;
+  slow_period: number;
+}
+
+// --- Typer for EMA/VWAP Strategi ---
+
+export enum EmaSource {
+  Open = 'Open',
+  High = 'High',
+  Low = 'Low',
+  Close = 'Close',
+  HLC3 = 'HLC3',
+}
+
+export enum VwapAnchorPeriod {
+  Session = 'Session',
+  Day = 'Day',
+  Week = 'Week',
+  Month = 'Month',
+}
+
+export enum TradeDirectionFilter {
+  Both = 'Both',
+  Long = 'Long',
+  Short = 'Short',
+}
+
+export enum FashionablyLateMode {
+  Off = 'Off',
+  OnClose = 'OnClose',
+  OnHighLow = 'OnHighLow',
+  ATR = 'ATR',
+}
+
+export enum SlTpMethod {
+  RiskBased = 'RiskBased',
+  FixedPercent = 'FixedPercent',
+  TrailingPercent = 'TrailingPercent',
+  Combined = 'Combined',
+}
+
+export interface EmaVwapParams {
+  ema_length: number;
+  ema_source: EmaSource;
+  vwap_anchor_period: VwapAnchorPeriod;
+  vwap_source: EmaSource;
+  trade_direction: TradeDirectionFilter;
+  fashionably_late_mode: FashionablyLateMode;
+  atr_threshold_fl: number;
+  atr_length_pos: number;
+  risk_gearing: number;
+  risk_perc: number;
+  sl_tp_method: SlTpMethod;
+  reward_mult_rb: number;
+  atr_mult_rb: number;
+  fixed_sl_perc: number;
+  fixed_tp_perc: number;
+  trailing_sl_perc: number;
+  fixed_tp_for_trailing_perc: number;
+  enable_max_drawdown: boolean;
+  max_drawdown_perc: number;
+  enable_max_consecutive_losses: boolean;
+  max_consecutive_losses: number;
+  enable_dmi_filter: boolean;
+  dmi_length: number;
+  dmi_smoothing: number;
+  dmi_threshold: number;
+}
 
 // --- Typer for Optimalisering (Frontend -> optimizationWorker) ---
+
 export interface ParameterRange {
   min: number;
   max: number;
@@ -79,6 +186,7 @@ export type OptimizationStrategyInfo =
 
 
 // --- Typer for Optimaliseringsresultater (optimizationWorker -> Frontend) ---
+
 export interface BestParamsBase {
   score: number;
   trades: number;
@@ -99,6 +207,7 @@ export type TopResultItem = SmaBestParams | RsiBestParams;
 
 
 // --- Typer for Monte Carlo (Frontend -> mcValidationWorker -> Frontend) ---
+
 export interface McSettings {
   iterations: number;
   barsPerSim: number;

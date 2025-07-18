@@ -96,7 +96,7 @@ const chartOptions = computed(() => ({
     },
   },
   stroke: {
-    curve: 'smooth',
+    curve: 'straight',
     width: 2,
   },
   grid: {

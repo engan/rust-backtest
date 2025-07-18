@@ -1,21 +1,23 @@
 /* tslint:disable */
 /* eslint-disable */
-export function greet(name: string): void;
-export function run_sma_crossover_backtest(klines_js: any, initial_capital: number, fast_period: number, slow_period: number, commission_percent: number, slippage_ticks: number, tick_size: number): any;
-export function calculate_smas_for_debug(klines_js: any, fast_period: number, slow_period: number): any;
+export function calculate_ema_debug(data_js: any, period: number): any;
+export function run_sma_crossover_backtest(klines_js: any, config_js: any, initial_capital: number, params_js: any): any;
+export function run_sma_crossover_mini_backtest(klines_js: any, config_js: any, initial_capital: number, params_js: any): any;
+export function run_ema_vwap_strategy(klines_js: any, config_js: any, initial_capital: number, params_js: any): any;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly greet: (a: number, b: number) => void;
-  readonly run_sma_crossover_backtest: (a: any, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
-  readonly calculate_smas_for_debug: (a: any, b: number, c: number) => [number, number, number];
-  readonly __wbindgen_exn_store: (a: number) => void;
-  readonly __externref_table_alloc: () => number;
-  readonly __wbindgen_export_2: WebAssembly.Table;
+  readonly calculate_ema_debug: (a: any, b: number) => any;
+  readonly run_sma_crossover_backtest: (a: any, b: any, c: number, d: any) => [number, number, number];
+  readonly run_sma_crossover_mini_backtest: (a: any, b: any, c: number, d: any) => [number, number, number];
+  readonly run_ema_vwap_strategy: (a: any, b: any, c: number, d: any) => [number, number, number];
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+  readonly __wbindgen_exn_store: (a: number) => void;
+  readonly __externref_table_alloc: () => number;
+  readonly __wbindgen_export_4: WebAssembly.Table;
   readonly __externref_table_dealloc: (a: number) => void;
   readonly __wbindgen_start: () => void;
 }

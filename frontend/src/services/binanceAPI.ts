@@ -8,6 +8,12 @@ export interface Kline {
   volume: number
 }
 
+// NYTT: Definerer en type for returverdien fra filter-funksjonen
+export interface SymbolFilters {
+  tickSize: number;
+  stepSize: number;
+}
+
 // Definerer (delvis) strukturen på rådata fra Binance API
 // [Open time, Open, High, Low, Close, Volume, Close time, Quote asset volume, Number of trades, Taker buy base asset volume, Taker buy quote asset volume, Ignore]
 type BinanceRawKline = [
@@ -194,6 +200,55 @@ export async function fetchBinanceKlines(
 
   console.log(`Finished fetching. Total klines retrieved: ${allKlines.length}`)
   return allKlines
+}
+
+/**
+ * NYTT NAVN OG RETURTYPE: Henter både tickSize og stepSize for et symbol.
+ * @param symbol Handelsparet (f.eks. 'SOLUSDT').
+ * @returns Et objekt med `tickSize` og `stepSize`.
+ * @throws Kaster en Error hvis symbolet eller filtrene ikke finnes.
+ */
+export async function fetchSymbolFilters(symbol: string): Promise<SymbolFilters> {
+  const url = `${PROXY_API_BASE_URL}/exchangeInfo`;
+  console.log(`Fetching exchange info from: ${url}`);
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch exchange info: ${response.statusText}`);
+    }
+    const data = await response.json();
+
+    const upperCaseSymbol = symbol.toUpperCase();
+    const symbolInfo = data.symbols.find((s: any) => s.symbol === upperCaseSymbol);
+
+    if (!symbolInfo) {
+      throw new Error(`Symbol ${symbol} not found in exchange info.`);
+    }
+
+    // --- Hent PRICE_FILTER (tickSize) ---
+    const priceFilter = symbolInfo.filters.find((f: any) => f.filterType === 'PRICE_FILTER');
+    if (!priceFilter || !priceFilter.tickSize) {
+      throw new Error(`tickSize (PRICE_FILTER) not found for symbol ${symbol}.`);
+    }
+    const tickSize = parseFloat(priceFilter.tickSize);
+
+    // --- NYTT: Hent LOT_SIZE (stepSize) ---
+    const lotSizeFilter = symbolInfo.filters.find((f: any) => f.filterType === 'LOT_SIZE');
+    if (!lotSizeFilter || !lotSizeFilter.stepSize) {
+      throw new Error(`stepSize (LOT_SIZE) not found for symbol ${symbol}.`);
+    }
+    const stepSize = parseFloat(lotSizeFilter.stepSize);
+
+    console.log(`Found filters for ${symbol}: tickSize=${tickSize}, stepSize=${stepSize}`);
+    return { tickSize, stepSize };
+
+  } catch (error) {
+    console.error("Error fetching or parsing exchange info:", error);
+    console.warn("Could not fetch symbol filters dynamically. Falling back to defaults.");
+    // Returner fornuftige standardverdier ved feil
+    return { tickSize: 0.01, stepSize: 0.01 }; 
+  }
 }
 
 // --- Viktige Merknader ---
