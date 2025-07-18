@@ -8,18 +8,20 @@ This repository hosts a high-performance web-based dashboard for backtesting tra
 
 The core backtesting, strategy implementations, and advanced quantitative analysis logic for this dashboard are developed and maintained in a separate, **private repository**: [`engan/rust-backtest-proprietary`](https://github.com/engan/rust-backtest-proprietary). This separation protects the intellectual property of the engine's core algorithms.
 
-![Image](https://github.com/user-attachments/assets/9e0f3b50-84e5-49d7-a0f8-cca0decf3f41)
+![Image](https://github.com/user-attachments/assets/734e440f-f2ab-4d61-8d04-e5d41609e037)
 
-_Image: Performance validation of the Minimal SMA Crossover strategy, showcasing the Rust/Wasm engine's results against TradingView. Key metrics like Total P&L, Total Trades, Profitable Trades, and Profit Factor demonstrate near-identical replication, affirming the engine's accuracy and reliability._
+_Image: Side-by-side validation of the Rust/Wasm engine (bottom) against TradingView (top). Key figures such as Total P&L, Max Drawdown, and Profit Factor are virtually identical, confirming the engine's accuracy and reliability._
 
 #### Note on Result Fidelity
 
-While core metrics like Total P&L, Total Trades, Profitable Trades (%), and Profit Factor consistently show near-identical or exact matches with TradingView's Strategy Tester, minor discrepancies in "Max Drawdown" (typically within ~1-5 percentage points) are observed. These marginal differences are attributed to:
+The backtesting engine has undergone rigorous validation against TradingView's Strategy Tester. As demonstrated in the image above, core performance metrics are now virtually identical. Key trade-level statistics—including **Quantity, PnL per trade, Run-up, and Drawdown per trade**—are replicated with exceptional precision.
 
-*   **Intra-bar Calculation Nuances:** TradingView may employ highly granular, undocumented calculations for peak and trough equity within a single bar's price action.
-*   **Floating-Point Arithmetic:** Inherent precision differences and accumulated rounding errors across disparate programming languages (Pine Script vs. Rust) over thousands of calculations.
+Minor discrepancies (typically < 0.1%) in final summary figures like "Total P&L" and "Max Equity Drawdown" are expected and attributed to:
 
-Despite these minor deviations, the engine's core trade execution, P&L attribution, and overall strategy performance metrics are validated to be highly accurate, providing a reliable foundation for strategy development and analysis.
+*   **Floating-Point Arithmetic:** Inherent, microscopic differences in how floating-point numbers are handled and rounded across disparate platforms (Pine Script's proprietary engine vs. Rust's IEEE 754 standard) over thousands of calculations.
+*   **Live Data Ticker:** The "Open P&L" for the final, open trade in TradingView is based on live or near-live price data, which can cause slight variations in the final summary.
+
+These marginal differences are considered statistical noise. The engine's core trade execution, cost modeling (commission and slippage), and intrabar performance analysis are validated to be a near-perfect replication, providing a robust and trustworthy foundation for strategy development.
 
 ## Features ✨
 
