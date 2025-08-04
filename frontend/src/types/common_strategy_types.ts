@@ -42,6 +42,13 @@ export interface EquityPoint {
   equity: number;
 }
 
+// Legg til denne nye enum-en
+export enum OrderSizeMode {
+  PercentOfEquity = 'PercentOfEquity',
+  FixedQuantity = 'FixedQuantity',
+  FixedValue = 'FixedValue',
+}
+
 export interface BacktestConfig {
   commission_percent: number;
   slippage_ticks: number;
@@ -62,8 +69,7 @@ export interface BacktestSummary {
 }
 
 export interface BacktestResult {
-  // trades: Trade[];
-  trade_log: TradeEvent[]; // Endret fra `trades`
+  trade_log: TradeEvent[]; 
   equity_curve: EquityPoint[];
   summary: BacktestSummary;
 }
@@ -72,6 +78,8 @@ export interface BacktestResult {
 export interface SmaParams {
   fast_period: number;
   slow_period: number;
+  order_size_mode: OrderSizeMode;
+  order_size_value: number;
   sl_tp_method: SlTpMethod;
   atr_length: number;
   reward_mult_rb: number;
@@ -82,13 +90,20 @@ export interface SmaParams {
   fixed_tp_for_trailing_perc: number;
   risk_gearing: number,
   risk_perc: number; 
-  fixed_qty?: number; 
 }
 
 // NYTT: Definer typen for de minimale parameterne.
 export interface MiniSmaParams {
   fast_period: number;
   slow_period: number;
+  order_size_mode: OrderSizeMode;
+  order_size_value: number;  
+}
+
+export interface RoundingFlags {
+  price_to_tick: boolean
+  qty_step: boolean
+  sl_tp_tick: boolean
 }
 
 // --- Typer for EMA/VWAP Strategi ---
@@ -154,6 +169,23 @@ export interface EmaVwapParams {
   dmi_length: number;
   dmi_smoothing: number;
   dmi_threshold: number;
+}
+
+// --- Typer for Frontend-spesifikk prosessering og visning ---
+
+export interface ProcessedTrade {
+  entry: TradeEvent;
+  exit?: TradeEvent; // Kan være undefined for åpne handler
+
+  positionValue: number; // NYTT 
+  
+  // Nye, beregnede egenskaper (valgfrie siden de kun gjelder lukkede handler)
+  returnPercent?: number;
+  pnlPercent?: number;
+  runUpPercent?: number;
+  drawdownPercent?: number;
+  cumulativePnl?: number;
+  cumulativePnlPercent?: number;
 }
 
 // --- Typer for Optimalisering (Frontend -> optimizationWorker) ---

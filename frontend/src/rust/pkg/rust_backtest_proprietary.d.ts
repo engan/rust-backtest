@@ -1,18 +1,18 @@
 /* tslint:disable */
 /* eslint-disable */
-export function calculate_ema_debug(data_js: any, period: number): any;
 export function run_sma_crossover_backtest(klines_js: any, config_js: any, initial_capital: number, params_js: any): any;
-export function run_sma_crossover_mini_backtest(klines_js: any, config_js: any, initial_capital: number, params_js: any): any;
+export function run_sma_crossover_mini_backtest(klines_js: any, config_js: any, initial_capital: number, params_js: any, flags_js: any): any;
 export function run_ema_vwap_strategy(klines_js: any, config_js: any, initial_capital: number, params_js: any): any;
+export function calculate_ema_debug(data_js: any, period: number): any;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly calculate_ema_debug: (a: any, b: number) => any;
   readonly run_sma_crossover_backtest: (a: any, b: any, c: number, d: any) => [number, number, number];
-  readonly run_sma_crossover_mini_backtest: (a: any, b: any, c: number, d: any) => [number, number, number];
+  readonly run_sma_crossover_mini_backtest: (a: any, b: any, c: number, d: any, e: any) => [number, number, number];
   readonly run_ema_vwap_strategy: (a: any, b: any, c: number, d: any) => [number, number, number];
+  readonly calculate_ema_debug: (a: any, b: number) => any;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_exn_store: (a: number) => void;
