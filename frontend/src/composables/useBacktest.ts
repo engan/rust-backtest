@@ -93,7 +93,7 @@ export function useBacktest() {
 
       const flags: RoundingFlags = {
         price_to_tick: opt.priceToTick,
-        qty_step: false,
+        quantity_step: false,
         sl_tp_tick: false,
       };
 

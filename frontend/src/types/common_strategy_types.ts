@@ -19,7 +19,7 @@ export interface Trade {
   entry_price: number;
   exit_price?: number;
   direction: 'long' | 'short';
-  qty: number;
+  quantity: number;
   pnl?: number;
 }
 
@@ -31,7 +31,7 @@ export interface TradeEvent {
   direction: 'long' | 'short'; 
   signal: string;
   price: number;
-  qty: number;
+  quantity: number;
   pnl?: number;
   run_up_amount?: number;
   drawdown_amount?: number;  
@@ -42,12 +42,19 @@ export interface EquityPoint {
   equity: number;
 }
 
-// Legg til denne nye enum-en
-export enum OrderSizeMode {
-  PercentOfEquity = 'PercentOfEquity',
-  FixedQuantity = 'FixedQuantity',
-  FixedValue = 'FixedValue',
+export interface PnlPoint {
+  timestamp: number;
+  pnlPercent: number;
 }
+
+// Legg til denne nye enum-en
+export const OrderSizeMode = {
+  PercentOfEquity: 'percentOfEquity',
+  FixedQuantity:   'fixedQuantity',
+  FixedValue:      'fixedValue',
+  ExplicitQty:     'explicitQty',
+} as const;
+export type OrderSizeMode = typeof OrderSizeMode[keyof typeof OrderSizeMode];
 
 export interface BacktestConfig {
   commission_percent: number;
@@ -57,21 +64,23 @@ export interface BacktestConfig {
 }
 
 export interface BacktestSummary {
-  final_equity: number;
-  total_pnl: number;
+  equity_final: number;
+  pnl_total: number;
   max_drawdown_percent: number;
   profit_factor: number;
   total_trades: number;
   profitable_trades: number;
   max_drawdown_amount: number;
   net_profit: number;
-  open_pnl: number;
+  pnl_open: number;
 }
 
 export interface BacktestResult {
   trade_log: TradeEvent[]; 
   equity_curve: EquityPoint[];
+  pnl_curve: PnlPoint[]; 
   summary: BacktestSummary;
+  bar_log: any[]; // Eller BarLogEntry[]
 }
 
 // Typer for SMA Crossover Strategi ---
@@ -102,7 +111,7 @@ export interface MiniSmaParams {
 
 export interface RoundingFlags {
   price_to_tick: boolean
-  qty_step: boolean
+  quantity_step: boolean
   sl_tp_tick: boolean
 }
 
