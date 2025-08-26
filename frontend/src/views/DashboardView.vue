@@ -3,184 +3,164 @@
     <h1>High-Performance Backtester (Rust/WASM)</h1>
 
     <div class="control-panel">
-      <h2>Simulation Controls</h2>
+      <!-- <h2>Simulation Controls</h2> -->
 
-      <fieldset>
-        <legend>Strategy Selection</legend>
-        <div>
-          <label for="strategy">Strategy:</label>
-          <select id="strategy" v-model="selectedStrategy">
-            <option value="smaCross">SMA Crossover (Full)</option>
-            <option value="smaCrossMini">SMA Crossover (Mini)</option>            
-            <option value="emaVwap">EMA/VWAP Advanced</option> 
-            <!-- <option value="rsi">RSI</option> -->
-          </select>
-        </div>
-      </fieldset>      
+      <!-- ======================= -->
+      <!--   TO-KOLONNE LAYOUT     -->
+      <!-- ======================= -->
+      <div class="controls-grid">
+        <!-- VENSTRE: INPUTS -->
+        <fieldset class="col-card">
+          <legend>Inputs</legend>
 
-    <fieldset class="mt-4">
-      <legend class="text-sm mb-2 font-semibold">Experimental</legend>
+          <!-- SMA -->
+          <section class="group">
+            <div class="group-title">SMA Crossover</div>
+            <div class="row">
+              <label for="sma_fast">Fast Period:</label>
+              <input id="sma_fast" type="number" v-model.number="smaParams.fast_period" />
+            </div>
+            <div class="row">
+              <label for="sma_slow">Slow Period:</label>
+              <input id="sma_slow" type="number" v-model.number="smaParams.slow_period" />
+            </div>
+          </section>
 
-      <label class="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          v-model="priceToTick"
-          class="accent-blue-500"
-        />
-        Round prices to exchange tick
-      </label>
-    </fieldset> 
+          <!-- SL/TP -->
+          <section class="group">
+            <div class="group-title">Stop-Loss &amp; Take-Profit</div>
+            <div class="row">
+              <label for="sma_sl_tp_method">SL/TP Method:</label>
+              <select id="sma_sl_tp_method" v-model="smaParams.sl_tp_method">
+                <option :value="SlTpMethod.RiskBased">RiskBased</option>
+                <option :value="SlTpMethod.FixedPercent">Fixed %</option>
+                <option :value="SlTpMethod.TrailingPercent">Trailing %</option>
+                <option :value="SlTpMethod.Combined">Combined</option>
+              </select>
+            </div>
 
-      <fieldset>
-        <legend>Data Source</legend>
-        <div>
-          <label for="symbol">Symbol:</label>
-          <input type="text" id="symbol" v-model="symbol" />
-        </div>
-        <div>
-          <label for="timeframe">Timeframe:</label>
-          <input type="text" id="timeframe" v-model="timeframe" />
-        </div>
-        <div>
-          <label for="limit">Data Limit:</label>
-          <input type="number" id="limit" v-model.number="dataLimitForFetch" />
-        </div>
-      </fieldset>
+            <!-- RB parametre -->
+            <div v-if="smaParams.sl_tp_method === SlTpMethod.RiskBased" class="method-rows">
+              <div class="row">
+                <label for="sma_rr">Reward/Risk Ratio:</label>
+                <input id="sma_rr" type="number" step="0.1" v-model.number="smaParams.reward_mult_rb">
+              </div>
+              <div class="row">
+                <label for="sma_atr_mult">R/R ATR Multiplier SL:</label>
+                <input id="sma_atr_mult" type="number" step="0.1" v-model.number="smaParams.atr_mult_rb">
+              </div>
+            </div>
 
-      <fieldset>
-        <legend>Backtest Properties</legend>
-        <div>
-          <label for="initial-capital">Initial Capital:</label>
-          <input type="number" id="initial-capital" v-model.number="initialCapital" />
-        </div>
-        <div>
-          <label for="order-size-value">Order Size:</label>
-          <input type="number" id="order-size-value" v-model.number="smaParams.order_size_value" style="flex-grow: 1;"/>
-          <select v-model="smaParams.order_size_mode" style="flex-grow:1; margin-left:8px;">
-            <option :value="OrderSizeMode.PercentOfEquity">% of equity</option>
-            <option :value="OrderSizeMode.FixedQuantity">Quantity</option>
-            <option :value="OrderSizeMode.FixedValue">USDT</option>
-            <option :value="OrderSizeMode.ExplicitQty">Explicit quantity (x gearing)</option>
-          </select>
-            <!-- lite info-ikon -->
-          <span class="tip" tabindex="0">ⓘ
-            <span class="tip-content">
-              <b>MODE 1: % of equity</b> - bruker default_quantity (100% = all-in).<br>
-              <b>MODE 2: Quantity</b> - fast antall enheter.<br>
-              <b>MODE 3: USDT</b> - fast verdi i quote.<br>
-              <b>MODE 4: Explicit quantity (x)</b> - <code>quantity = equity[1]/close[1] x gearing</code>
-              og sendes eksplisitt til <code>strategy.entry</code>.
-            </span>
-          </span>
-        </div>        
-      </fieldset>      
+            <!-- Fixed -->
+            <div v-if="smaParams.sl_tp_method === SlTpMethod.FixedPercent" class="method-rows">
+              <div class="row"><label>Fixed SL %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc" /></div>
+              <div class="row"><label>Fixed TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_perc" /></div>
+            </div>
 
-      <fieldset>
-        <legend>Backtest Costs</legend>
-        <div>
-          <label for="commission">Commission (%):</label>
-          <input type="number" id="commission" step="0.01" v-model.number="commissionPercent" style="width: 60px" />
-        </div>
-        <div>
-          <label for="slippage">Slippage (ticks):</label>
-          <input type="number" id="slippage" v-model.number="slippageTicks" style="width: 60px" />
-        </div>
-      </fieldset>      
+            <!-- Trailing -->
+            <div v-if="smaParams.sl_tp_method === SlTpMethod.TrailingPercent" class="method-rows">
+              <div class="row"><label>Trailing SL %:</label><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc"></div>
+              <div class="row"><label>Trailing TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
+            </div>
 
-      <fieldset v-if="selectedStrategy === 'smaCross' || selectedStrategy === 'smaCrossMini'">
-        <legend>SMA Crossover Parameters</legend>
-        
-        <div>
-          <label for="sma_fast">Fast Period:</label>
-          <input id="sma_fast" type="number" v-model.number="smaParams.fast_period" />
-        </div>
-        <div>
-          <label for="sma_slow">Slow Period:</label>
-          <input id="sma_slow" type="number" v-model.number="smaParams.slow_period" />
-        </div>
-        
-        <hr style="margin: 1rem 0; border-color: #444;">
+            <!-- Combined -->
+            <div v-if="smaParams.sl_tp_method === SlTpMethod.Combined" class="method-rows">
+              <div class="row"><label>Fixed SL %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc"></div>
+              <div class="row"><label>Trailing SL %:</label><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc"></div>
+              <div class="row"><label>Trailing TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
+            </div>
+          </section>
 
-        <!-- KUN FOR "FULL" STRATEGI - Risk & Position Sizing -->
-       <template v-if="selectedStrategy === 'smaCross'">
-          <div>
-            <label for="sma_risk_perc">Risk per Trade %:</label>
-            <input id="sma_risk_perc" type="number" step="0.1" v-model.number="smaParams.risk_perc">
-          </div>
-          <div>
-            <label for="sma_atr_len">ATR Length:</label>
-            <input id="sma_atr_len" type="number" v-model.number="smaParams.atr_length">
-          </div>
-          <hr style="margin: 1rem 0; border-color: #444;">
-        </template>
-        
-        <!-- FELLES SL/TP-INNSTILLINGER -->
-        <div>
-          <label for="sma_sl_tp_method">SL/TP Method:</label>
-          <select id="sma_sl_tp_method" v-model="smaParams.sl_tp_method">
-            <!-- Vis RiskBased kun for "Full" -->
-            <option v-if="selectedStrategy === 'smaCross'" :value="SlTpMethod.RiskBased">RiskBased</option>
-            <option :value="SlTpMethod.FixedPercent">Fixed %</option>
-            <option :value="SlTpMethod.TrailingPercent">Trailing %</option>
-            <option :value="SlTpMethod.Combined">Combined</option>
-          </select>
-        </div>
+          <!-- Risk & Position Sizing (kun RB) -->
+          <section class="group" v-if="smaParams.sl_tp_method === SlTpMethod.RiskBased">
+            <div class="group-title">Risk &amp; Position Sizing</div>
+            <div class="row">
+              <label for="sma_atr_len">ATR Length:</label>
+              <input id="sma_atr_len" type="number" v-model.number="smaParams.atr_length">
+            </div>
+            <div class="row">
+              <label for="sma_risk_gearing">Risk Gearing (x):</label>
+              <select id="sma_risk_gearing" v-model.number="smaParams.risk_gearing">
+                <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="sma_risk_perc">Risk per Trade %:</label>
+              <input id="sma_risk_perc" type="number" step="0.1" v-model.number="smaParams.risk_perc">
+            </div>
+          </section>
+        </fieldset>
 
-        <!-- Conditional Inputs for SL/TP Methods -->
-        <div v-if="smaParams.sl_tp_method === SlTpMethod.RiskBased && selectedStrategy === 'smaCross'">
-            <label>Reward/Risk Ratio:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.reward_mult_rb">
-            <label>ATR Multiplier:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.atr_mult_rb">
-        </div>
-        
-        <div v-if="smaParams.sl_tp_method === SlTpMethod.FixedPercent">
-            <label>Fixed SL %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc">
-            <label>Fixed TP %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.fixed_tp_perc">
-        </div>
+        <!-- HØYRE: PROPERTIES -->
+        <fieldset class="col-card">
+          <legend>Properties</legend>
 
-        <div v-if="smaParams.sl_tp_method === SlTpMethod.TrailingPercent">
-            <label>Trailing SL %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc">
-            <label>Trailing TP %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc">
-        </div>
+          <section class="group">
+            <div class="group-title">Strategy Selection</div>
+            <div class="row">
+              <label for="strategy">Strategy:</label>
+              <select id="strategy" v-model="selectedStrategy">
+                <option value="smaCross">SMA Crossover (Full)</option>
+                <option value="smaCrossMini">SMA Crossover (Mini)</option>
+                <option value="emaVwap">EMA/VWAP Advanced</option>
+              </select>
+            </div>
+          </section>
 
-        <!-- NYTT: Inputs for Combined -->
-        <div v-if="smaParams.sl_tp_method === SlTpMethod.Combined">
-            <label>Fixed SL %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc">
-            <label>Trailing SL %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc">
-             <label>Trailing TP %:</label>
-            <input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc">
-        </div>
-      </fieldset>
+          <section class="group">
+            <div class="group-title">Experimental</div>
+            <div class="row row-checkbox">
+              <input id="priceToTick" type="checkbox" v-model="priceToTick" class="accent-blue-500" />
+              <label for="priceToTick" class="inline-label">Round prices to exchange tick</label>
+            </div>
+          </section>
 
-    <!-- ======================================================= -->
-    <!-- NY SEKSJON FOR EMA/VWAP PARAMETERE -->
-    <!-- ======================================================= -->
-    <div class="strategy-parameters" v-if="selectedStrategy === 'emaVwap'">
-      <!-- Her legger du inn alle de nye input-feltene. -->
-      <!-- Eksempel for én seksjon: -->
-      <fieldset>
-        <legend>Moving Averages</legend>
-        <div>
-          <label for="emaLength">EMA Length:</label>
-          <input id="emaLength" type="number" v-model.number="emaVwapParams.ema_length">
-        </div>
-        <div>
-          <label for="emaSource">EMA Source:</label>
-          <select id="emaSource" v-model="emaVwapParams.ema_source">
-            <option v-for="s in EmaSource" :key="s" :value="s">{{ s }}</option>
-          </select>
-        </div>
-      </fieldset>
-    </div> 
+          <section class="group">
+            <div class="group-title">Data Source</div>
+            <div class="row"><label for="symbol">Symbol:</label><input id="symbol" v-model="symbol" type="text" /></div>
+            <div class="row"><label for="timeframe">Timeframe:</label><input id="timeframe" v-model="timeframe" type="text" /></div>
+            <div class="row"><label for="limit">Data Limit:</label><input id="limit" v-model.number="dataLimitForFetch" type="number" /></div>
+          </section>
 
-      <button @click="runBacktest" :disabled="isLoading">
+          <section class="group">
+            <div class="group-title">Backtest Properties</div>
+            <div class="row">
+              <label for="initial-capital">Initial Capital:</label>
+              <input id="initial-capital" type="number" v-model.number="initialCapital" />
+              <span v-if="isRiskBased" class="hint">Risk-Based sizing aktiv (order size-feltene deaktivert)</span>
+            </div>
+            <div class="row">
+              <label for="order-size-value">Order Size:</label>
+              <input id="order-size-value" type="number" v-model.number="smaParams.order_size_value" :disabled="isRiskBased" />
+              <select v-model="smaParams.order_size_mode" :disabled="isRiskBased" style="margin-left:8px;">
+                <option :value="OrderSizeMode.PercentOfEquity">% of equity</option>
+                <option :value="OrderSizeMode.FixedQuantity">Quantity</option>
+                <option :value="OrderSizeMode.FixedValue">USDT</option>
+                <option :value="OrderSizeMode.ExplicitQty">Explicit quantity (x gearing)</option>
+              </select>
+              <!-- lite info-ikon -->
+              <span class="tip" tabindex="0">ⓘ
+                <span class="tip-content">
+                  <b>MODE 1: % of equity</b> - bruker default_quantity (100% = all-in).<br>
+                  <b>MODE 2: Quantity</b> - fast antall enheter.<br>
+                  <b>MODE 3: USDT</b> - fast verdi i quote.<br>
+                  <b>MODE 4: Explicit quantity (x)</b> - <code>qty = equity[1]/close[1] × gearing</code>.
+                  <hr style="border-color:#333; margin:6px 0;">
+                  <b>Risk-Based</b>: posisjonsstørrelsen beregnes automatisk fra <i>Risk per Trade %</i> og <i>ATR</i>.
+                </span>
+              </span>              
+            </div>
+          </section>
+
+          <section class="group">
+            <div class="group-title">Backtest Costs</div>
+            <div class="row"><label for="commission">Commission (%):</label><input id="commission" type="number" step="0.01" v-model.number="commissionPercent" style="width:60px" /></div>
+            <div class="row"><label for="slippage">Slippage (ticks):</label><input id="slippage" type="number" v-model.number="slippageTicks" style="width:60px" /></div>
+          </section>
+        </fieldset>
+      </div>
+
+      <button class="run-btn" @click="runBacktest" :disabled="isLoading">
         {{ isLoading ? 'Running Backtest...' : 'Run Backtest' }}
       </button>
       <!-- 
@@ -191,7 +171,7 @@
     </div>
 
     <div class="results-panel" v-if="results">
-      <h2>Backtest Results</h2>
+      <h3>Backtest Results</h3>
       <div class="summary-metrics">
         <div>
           <strong>Total P&L:</strong><br />
@@ -506,7 +486,7 @@ const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaV
 // --- Input variabler ---
 const symbol = ref('SOLUSDT');
 const timeframe = ref('1h'); 
-const dataLimitForFetch = ref(14341);
+const dataLimitForFetch = ref(14492);
 const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini');
 
 // `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
@@ -530,6 +510,9 @@ const smaParams = reactive<SmaParams>({
   risk_perc: 1.5,
   // ... legg til combined defaults ...
 });
+
+// Aktiv RB? (gjelder nå for både Full og Mini)
+const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBased);
 
 const priceToTick = ref(false) 
 const commissionPercent = ref(0.05);
@@ -759,35 +742,36 @@ const calc: ProcessedTrade[] = grouped.map(t => {
   max-width: 90vw; /* Gjør dashbordet bredt */
   margin: 0 auto;
   padding: 1rem;
+  --label-width: 170px;   /* Justér denne for å skyve alle inputfelt til høyre / venstre */
+  --section-gap: 1.5rem;  /* felles spacing-variabel for seksjoner/knapp */
 }
 
 .control-panel,
 .results-panel {
   display: flex;
   flex-direction: column; /* Stable vertikal stabling */
-  gap: 1.5rem; /* Mellomrom mellom fieldsets/seksjoner */
+  gap: var(--section-gap); /* Mellomrom mellom fieldsets/seksjoner */
+}
+
+/* To-kolonne grid (responsivt). Ved smal skjerm: 1 kolonne */
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 1200px) {
+  .controls-grid { grid-template-columns: 1fr 1fr; }
 }
 
 /* Felles stil for alle boksene */
 fieldset,
-.summary-metrics,
-.chart-wrapper,
-.trades-wrapper {
+.summary-metrics {
   border: 1px solid #444;
   padding: 1.5rem; /* Øk padding for romsligere utseende */
   border-radius: 8px;
   background-color: #2a2a2a;
 }
 
-/* Flex-layout for innhold i fieldset-div */
-fieldset div {
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.5rem; /* Mindre margin mellom input-linjer */
-}
-fieldset div:last-child {
-  margin-bottom: 0;
-}
 
 /* Styling for nøkkeltallene */
 .summary-metrics {
@@ -814,13 +798,16 @@ fieldset div:last-child {
 /* Generell styling */
 h1 {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-top: -3.5rem;   
+  margin-bottom: 0.8rem;   
   color: #eee;
 }
 h2 {
   text-align: center;
-  margin-bottom: 1.5rem;
-  color: #eee;
+  margin-bottom: 0.8rem;   /* strammere mellom tittel og kontroller */
+  color: #bbb;             /* litt mer dempet enn h1 */
+  font-size: 1rem;
+  font-weight: 500;
 }
 h3 {
   margin-top: 0;
@@ -829,8 +816,64 @@ h3 {
   margin-bottom: 1rem;
   color: #eee;
 }
-label {
-  min-width: 120px; /* Mer plass for labels */
+.sublegend {
+  margin: .2rem 0 .6rem;
+  color: #aab;
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-weight: 600;
+}
+/* Kolonnekort (Inputs / Properties) */
+.col-card {
+  border: 1px solid #444;
+  padding: 1.25rem;
+  border-radius: 8px;
+  background-color: #2a2a2a;
+}
+
+/* Underseksjoner i et kolonne-kort */
+.group + .group {            /* separator mellom grupper */
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #444;
+}
+.group-title {
+  margin: 0 0 .6rem 0;
+  color: #aab;
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-weight: 600;
+}
+
+/* Rader (label + input) – bruk .row i templaten */
+.row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.row:last-child { margin-bottom: 0; }
+/* Checkbox-rader: ikke bruk label-kolonnebredden */
+.row-checkbox {
+  gap: 10px;
+  padding-left: var(--label-width); /* indenter slik at checkboxen står på linje med inputs */
+  flex-wrap: nowrap;                /* aldri bryt linjen */
+}
+.row-checkbox .inline-label {
+  width: auto !important;
+  min-width: 0 !important;
+  flex: 0 1 auto !important;
+  margin: 0 !important;
+  text-align: left !important;
+  white-space: nowrap;              /* hindrer linjebrudd i teksten */
+}
+
+/* Valgfritt: snevr inn at kolonnebredde kun gjelder "vanlige" rader */
+.row > label:not(.inline-label) {
+  width: var(--label-width);
+  min-width: var(--label-width);
+  flex: 0 0 var(--label-width);
   text-align: right;
   margin-right: 10px;
   color: #ccc;
@@ -844,10 +887,14 @@ select {
   border-radius: 4px;
   background-color: #3a3a3a;
   color: #eee;
-  max-width: 200px; /* Gi en maks bredde for å unngå for lange felt */
+  max-width: 210px; /* Gi en maks bredde for å unngå for lange felt */
 }
+/* Loddrett for metode-spesifikke felt (Fixed/Trailing/Combined/RB) */
+.method-rows .row { margin-bottom: 0.5rem; }
+
+/* Liten hint-tekst ved RB */
+.hint { margin-left: 10px; color: #aaa; font-size: 0.9em; }
 button {
-  margin-top: 1.5rem; /* Mer margin over knapper */
   padding: 10px 20px;
   background-color: #007bff;
   color: white;
@@ -855,11 +902,26 @@ button {
   border-radius: 4px;
   cursor: pointer;
   font-size: 1em;
-  width: 100%; /* Knapper fyller hele bredden */
 }
 button:disabled {
   background-color: #555;
   cursor: not-allowed;
+}
+
+/* Run Backtest: ikke full bredde og lik avstand som mellom seksjonene */
+.run-btn {
+  width: auto;                 /* ikke 100% bredde */
+  min-width: 220px;            /* litt «tyngde» */
+  align-self: center;          /* behold sentrering (kan byttes til flex-start) */
+  margin-top: var(--section-gap); /* samme vertikale avstand som fieldsets */
+}
+
+/* (valgfritt) litt responsivitet */
+@media (max-width: 900px) {
+  .dashboard-view { --label-width: 140px; }
+}
+@media (max-width: 720px) {
+  .dashboard-view { --label-width: 120px; }
 }
 
 /* NYTT: Litt styling for prosentverdiene for å matche TradingView */
@@ -917,7 +979,7 @@ tr > td:nth-child(4)  /* Date/Time */
 }
 .tip-content {
   position:absolute; left:50%; transform:translateX(-50%);
-  bottom:130%; min-width:850px; max-width:900px; padding:8px 10px; border-radius:6px;
+  bottom:130%; min-width:650px; max-width:650px; padding:8px 10px; border-radius:6px;
   background:#111; color:#eee; border:1px solid #444; box-shadow:0 6px 20px rgba(0,0,0,.35);
   opacity:0; pointer-events:none; transition:opacity .12s ease; z-index:10; white-space:normal;
 }
