@@ -39,7 +39,7 @@ These marginal differences are considered statistical noise. The engine's core t
 - Small hints/tooltips for order sizing modes
 </details>
 
-![Image](https://github.com/user-attachments/assets/63a114eb-7ebf-41f8-8cc2-84ec248d7f93)
+![Image](https://github.com/user-attachments/assets/fdf0eaff-b3b7-4451-adb5-db3bb2dcf517)
 
 ## Features ✨
 
