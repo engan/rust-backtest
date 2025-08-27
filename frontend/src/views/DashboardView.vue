@@ -26,6 +26,30 @@
             </div>
           </section>
 
+          <!-- Trading Direction -->
+          <section class="group">
+            <div class="group-title">Long and/or Short</div>
+
+            <div class="row">
+              <label for="sma_trade_dir">Trading Direction:</label>
+              <select id="sma_trade_dir" v-model="smaParams.trade_direction">
+                <option :value="TradeDirectionFilter.Both">Both</option>
+                <option :value="TradeDirectionFilter.Long">Long</option>
+                <option :value="TradeDirectionFilter.Short">Short</option>
+              </select>
+
+              <!-- lite info-ikon -->
+              <span class="tip" tabindex="0" style="margin-left:6px"> ⓘ
+                <span class="tip-content">
+                  <b>Default: 'Both'.</b><br>
+                  - <b>Both:</b> Allows both long and short trades<br>
+                  - <b>Long:</b> Only long trades<br>
+                  - <b>Short:</b> Only short trades
+                </span>
+              </span>
+            </div>
+          </section>          
+
           <!-- SL/TP -->
           <section class="group">
             <div class="group-title">Stop-Loss &amp; Take-Profit</div>
@@ -127,9 +151,9 @@
             <div class="row">
               <label for="initial-capital">Initial Capital:</label>
               <input id="initial-capital" type="number" v-model.number="initialCapital" />
-              <span v-if="isRiskBased" class="hint">Risk-Based sizing aktiv (order size-feltene deaktivert)</span>
+              <span v-if="isRiskBased" class="hint"> Disabled when Risk-Based sizing active!</span>
             </div>
-            <div class="row">
+            <div class="row" :class="{ 'row-disabled': isRiskBased }">
               <label for="order-size-value">Order Size:</label>
               <input id="order-size-value" type="number" v-model.number="smaParams.order_size_value" :disabled="isRiskBased" />
               <select v-model="smaParams.order_size_mode" :disabled="isRiskBased" style="margin-left:8px;">
@@ -507,7 +531,8 @@ const smaParams = reactive<SmaParams>({
   atr_mult_rb: 1.5,
   risk_gearing: 1,
   risk_perc: 1.5,
-  // ... legg til combined defaults ...
+  
+  trade_direction: TradeDirectionFilter.Both,
 });
 
 // Aktiv RB? (gjelder nå for både Full og Mini)
@@ -905,7 +930,6 @@ h3 {
   text-align: left !important;
   white-space: nowrap;              /* hindrer linjebrudd i teksten */
 }
-
 /* Valgfritt: snevr inn at kolonnebredde kun gjelder "vanlige" rader */
 .row > label:not(.inline-label) {
   width: var(--label-width);
@@ -915,6 +939,7 @@ h3 {
   margin-right: 10px;
   color: #ccc;
 }
+.row-disabled { opacity: .6; }
 input[type='text'],
 input[type='number'],
 select {
@@ -931,7 +956,8 @@ select {
 
 /* Liten hint-tekst ved RB */
 .hint { 
-  margin-left: 10px; 
+  margin-left: 20px; 
+  margin-bottom: -22px; 
   color: #aaa; 
   font-size: 0.9em; }
 button {

@@ -98,7 +98,8 @@ export interface SmaParams {
   trailing_sl_perc: number;
   fixed_tp_for_trailing_perc: number;
   risk_gearing: number,
-  risk_perc: number; 
+  risk_perc: number;
+  trade_direction: TradeDirectionFilter;   // new
 }
 
 // NYTT: Definer typen for de minimale parameterne.
