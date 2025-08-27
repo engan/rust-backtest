@@ -23,6 +23,24 @@ Minor discrepancies (typically < 0.1%) in final summary figures like "Total P&L"
 
 These marginal differences are considered statistical noise. The engine's core trade execution, cost modeling (commission and slippage), and intrabar performance analysis are validated to be a near-perfect replication, providing a robust and trustworthy foundation for strategy development.
 
+## What's new (Aug 2025)
+
+- Two-column control panel with compact spacing
+- Fused *Backtest Results* + chart (TradingView-style)
+- TradingView-like trades table (P&L, run-up, drawdown, cumulative)
+- Tick-rounding toggle, Risk Gearing dropdown, improved fieldsets
+<details>
+<summary>July 2025 → August 2025</summary>
+
+- Removed section underlines; compact headers placed tight to their content
+- “Backtest Results” metrics fused with the chart into a single card
+- Tighter spacing and consistent label column widths
+- More legible trade table with TV-style open/exit grouping
+- Small hints/tooltips for order sizing modes
+</details>
+
+![Image](https://github.com/user-attachments/assets/63a114eb-7ebf-41f8-8cc2-84ec248d7f93)
+
 ## Features ✨
 
 -   **High-Performance Backtesting:** Utilizes a Rust/Wasm engine for rapid and accurate strategy execution.
