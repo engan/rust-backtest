@@ -171,7 +171,10 @@
     </div>
 
     <div class="results-panel" v-if="results">
-      <h3>Backtest Results</h3>
+    <h3 class="section-title">Backtest Results</h3>
+
+    <!-- Metrics + Chart merged into a single visual card -->
+    <div class="results-stack">
       <div class="summary-metrics">
         <div>
           <strong>Total P&L:</strong><br />
@@ -179,43 +182,39 @@
         </div>
         <div>
           <strong>Max equity drawdown:</strong><br />
-          {{ results.summary.max_drawdown_amount.toFixed(2) }} USDT 
+          {{ results.summary.max_drawdown_amount.toFixed(2) }} USDT
           ({{ results.summary.max_drawdown_percent.toFixed(2) }} %)
         </div>
         <div>
           <strong>Total Trades:</strong><br />{{ results.summary.total_trades }}
         </div>
         <div>
-          <strong>Profitable trades:</strong><br />{{ (results.summary.profitable_trades / results.summary.total_trades * 100).toFixed(2) }}% ({{
-            results.summary.profitable_trades
-          }})
+          <strong>Profitable trades:</strong><br />{{
+            (results.summary.profitable_trades / results.summary.total_trades * 100).toFixed(2)
+          }}% ({{ results.summary.profitable_trades }})
         </div>
         <div>
           <strong>Profit factor:</strong><br />{{ results.summary.profit_factor.toFixed(3) }}
         </div>
       </div>
-      <!-- 
-      <h3>Equity Curve</h3>
-      <EquityChart :equity-curve="results.equity_curve" />
-      -->
-      <h3>Performance</h3>
-      <!-- v-if sikrer at vi kun prøver å rendre når dataen faktisk finnes -->
-      <PnlChart
-        v-if="results?.equity_curve?.length"
-        :equity-curve="results.equity_curve"
-        :initial-capital="initialCapital"
-        :trade-log="results.trade_log"
 
-        :range-start-ms="tvStartMs"
-        :range-end-ms="tvEndMs"
+      <div class="chart-card" v-if="results?.equity_curve?.length">
+        <PnlChart
+          :equity-curve="results.equity_curve"
+          :initial-capital="initialCapital"
+          :trade-log="results.trade_log"
+          :range-start-ms="tvStartMs"
+          :range-end-ms="tvEndMs"
+          baseline-mode="firstNonFlat"
+        />
+      </div>
 
-        baseline-mode="firstNonFlat"  
-      />
       <div v-else class="empty-chart-placeholder">
         No performance data to display.
       </div>
+    </div>
 
-      <h3>List of Trades</h3>
+    <h3 class="section-title">List of Trades</h3>
 
       <table v-if="processedTradeLog.length > 0">
         <thead>
@@ -486,7 +485,7 @@ const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaV
 // --- Input variabler ---
 const symbol = ref('SOLUSDT');
 const timeframe = ref('1h'); 
-const dataLimitForFetch = ref(14492);
+const dataLimitForFetch = ref(14504);
 const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini');
 
 // `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
@@ -763,6 +762,20 @@ const calc: ProcessedTrade[] = grouped.map(t => {
   .controls-grid { grid-template-columns: 1fr 1fr; }
 }
 
+/* Compact section titles */
+.section-title {
+  color: #eee;
+  margin: 1.0rem 0 -1.2rem 0;     /* small bottom gap so content sits tight */
+  font-weight: 600;
+  border: 0;
+  padding: 0;
+}
+
+/* Metrics + chart visually fused */
+.results-stack {
+  margin: 0;
+}
+
 /* Felles stil for alle boksene */
 fieldset,
 .summary-metrics {
@@ -772,6 +785,10 @@ fieldset,
   background-color: #2a2a2a;
 }
 
+fieldset legend {
+  font-size: 1.4rem;
+}
+
 
 /* Styling for nøkkeltallene */
 .summary-metrics {
@@ -779,9 +796,28 @@ fieldset,
   justify-content: space-around;
   text-align: center;
   padding: 1rem; /* Mer padding for nøkkeltall */
+  /* Top piece of the fused card */
+  margin: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;  
 }
 .summary-metrics div {
   flex: 1; /* Gir lik bredde til hver nøkkeltall-div */
+}
+
+/* Bottom piece of the fused card */
+.chart-card {
+  border: 1px solid #444;
+  border-top: 0;                          /* seam disappears */
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  padding: 0;                             /* chart hugs the edge */
+  overflow: hidden;                       /* hide inner overflow from chart lib */
+}
+
+/* Kill any unexpected top-margins inside the chart component */
+.chart-card > * {
+  margin-top: 0 !important;
 }
 
 .empty-chart-placeholder {
@@ -809,20 +845,21 @@ h2 {
   font-size: 1rem;
   font-weight: 500;
 }
+/* Seksjonstitler (Results/Performance/Trades): uten linje, jevn avstand */
 h3 {
-  margin-top: 0;
-  border-bottom: 1px solid #555;
-  padding-bottom: 0.5rem;
-  margin-bottom: 1rem;
   color: #eee;
-}
-.sublegend {
-  margin: .2rem 0 .6rem;
-  color: #aab;
-  font-size: .85rem;
-  text-transform: uppercase;
-  letter-spacing: .03em;
+  border: 0;
+  padding: 0;
+  margin: 1.2rem 0 .6rem;   /* topp → litt luft fra forrige seksjon, bunn → tett på innholdet */
   font-weight: 600;
+}
+/* Første tittel i resultatskortet trenger ikke topp-luft */
+.results-panel h3:first-child { 
+  margin-top: 0; 
+}
+/* Tighten space before the trades table */
+.results-panel table {
+  margin-top: .25rem;                     /* was 1rem */
 }
 /* Kolonnekort (Inputs / Properties) */
 .col-card {
@@ -893,7 +930,10 @@ select {
 .method-rows .row { margin-bottom: 0.5rem; }
 
 /* Liten hint-tekst ved RB */
-.hint { margin-left: 10px; color: #aaa; font-size: 0.9em; }
+.hint { 
+  margin-left: 10px; 
+  color: #aaa; 
+  font-size: 0.9em; }
 button {
   padding: 10px 20px;
   background-color: #007bff;
@@ -951,8 +991,12 @@ th {
   font-weight: bold;
 }
 td[rowspan="2"] {
-    vertical-align: middle; /* Sentrer innholdet i celler som spenner over to rader */
-    text-align: center;
+  vertical-align: middle; /* Sentrer innholdet i celler som spenner over to rader */
+  text-align: center;
+}
+/* Overstyrer første kolonne (Trade #) av regelen som står rett ovenfor */
+td[rowspan="2"]:first-child {
+  text-align: left;
 }
 tr > td:nth-child(5), /* Price */
 tr > td:nth-child(4)  /* Date/Time */
