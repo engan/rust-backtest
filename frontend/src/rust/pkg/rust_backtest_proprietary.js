@@ -166,6 +166,15 @@ function debugString(val) {
     // TODO we could test for more things here, like `Set`s and `Map`s.
     return className;
 }
+/**
+ * @param {any} data_js
+ * @param {number} period
+ * @returns {any}
+ */
+export function calculate_ema_debug(data_js, period) {
+    const ret = wasm.calculate_ema_debug(data_js, period);
+    return ret;
+}
 
 function takeFromExternrefTable0(idx) {
     const value = wasm.__wbindgen_export_4.get(idx);
@@ -216,16 +225,6 @@ export function run_ema_vwap_strategy(klines_js, config_js, initial_capital, par
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
-}
-
-/**
- * @param {any} data_js
- * @param {number} period
- * @returns {any}
- */
-export function calculate_ema_debug(data_js, period) {
-    const ret = wasm.calculate_ema_debug(data_js, period);
-    return ret;
 }
 
 async function __wbg_load(module, imports) {

@@ -99,7 +99,10 @@ export interface SmaParams {
   fixed_tp_for_trailing_perc: number;
   risk_gearing: number,
   risk_perc: number;
-  trade_direction: TradeDirectionFilter;   // new
+  trade_direction: TradeDirectionFilter;
+
+  use_explicit_qty?: boolean; // mirrors Pine's "Use explicit qty" toggle
+  parity_mode?: boolean;      // Match TradingView sizing behaviour
 }
 
 // NYTT: Definer typen for de minimale parameterne.

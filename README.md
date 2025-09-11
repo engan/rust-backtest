@@ -8,20 +8,15 @@ This repository hosts a high-performance web-based dashboard for backtesting tra
 
 The core backtesting, strategy implementations, and advanced quantitative analysis logic for this dashboard are developed and maintained in a separate, **private repository**: [`engan/rust-backtest-proprietary`](https://github.com/engan/rust-backtest-proprietary). This separation protects the intellectual property of the engine's core algorithms.
 
-![Image](https://github.com/user-attachments/assets/734e440f-f2ab-4d61-8d04-e5d41609e037)
+![Image](https://github.com/user-attachments/assets/9b5f58e1-48b0-4773-b8c5-a3a0a0cab33f)
 
-_Image: Side-by-side validation of the Rust/Wasm engine (bottom) against TradingView (top). Key figures such as Total P&L, Max Drawdown, and Profit Factor are virtually identical, confirming the engine's accuracy and reliability._
+_Image: TradingView (bottom) vs. Rust/Wasm engine (top).  
+All metrics — Total P&L, Max equity drawdown, Profit factor — **and** every trade-level value (Qty, Net P&L, Run-up, Drawdown, Cumulative P&L) match **exactly** (cent & percent)._
 
-#### Note on Result Fidelity
+#### Result Fidelity (100% Parity)
 
-The backtesting engine has undergone rigorous validation against TradingView's Strategy Tester. As demonstrated in the image above, core performance metrics are now virtually identical. Key trade-level statistics—including **Quantity, PnL per trade, Run-up, and Drawdown per trade**—are replicated with exceptional precision.
-
-Minor discrepancies (typically < 0.1%) in final summary figures like "Total P&L" and "Max Equity Drawdown" are expected and attributed to:
-
-*   **Floating-Point Arithmetic:** Inherent, microscopic differences in how floating-point numbers are handled and rounded across disparate platforms (Pine Script's proprietary engine vs. Rust's IEEE 754 standard) over thousands of calculations.
-*   **Live Data Ticker:** The "Open P&L" for the final, open trade in TradingView is based on live or near-live price data, which can cause slight variations in the final summary.
-
-These marginal differences are considered statistical noise. The engine's core trade execution, cost modeling (commission and slippage), and intrabar performance analysis are validated to be a near-perfect replication, providing a robust and trustworthy foundation for strategy development.
+The engine has been validated against TradingView’s Strategy Tester and achieves **100% numerical parity** for the validated setup.  
+Every figure in the **Overview** and **List of trades** (including MFE/MAE and Cumulative P&L) is identical to TradingView’s output.
 
 ## What's new (Aug 2025)
 
@@ -39,7 +34,13 @@ These marginal differences are considered statistical noise. The engine's core t
 - Small hints/tooltips for order sizing modes
 </details>
 
-![Image](https://github.com/user-attachments/assets/fdf0eaff-b3b7-4451-adb5-db3bb2dcf517)
+## What's new (Sep 2025)
+
+- **100% TradingView parity** across Overview & List of trades  
+  (Net P&L, Max equity drawdown, Profit factor, Qty, Run-up, Drawdown, **Cumulative P&L**)
+- Cumulative P&L display adjusted to exact “cent & percent” parity
+- TV-exact MDD calculation (peak-before-trade + MAE without entry fee)
+- Polished trades table (rounding/display), small UI improvements
 
 ## Features ✨
 
@@ -54,7 +55,7 @@ These marginal differences are considered statistical noise. The engine's core t
 
 ## Technology Stack 🛠️
 
--   **Frontend:** [Vue 3](https://vuejs.org/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/), [Vue3 ApexCharts](https://github.com/apexcharts/vue3-apexcharts), [pnpm](https://pnpm.io/)
+-   **Frontend:** [Vue 3](https://vuejs.org/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/), [pnpm](https://pnpm.io/), [TradingView Lightweight Charts™](https://www.tradingview.com/lightweight-charts/)
 -   **Core Engine:** [Rust](https://www.rust-lang.org/), [WebAssembly (Wasm)](https://webassembly.org/), [wasm-pack](https://rustwasm.github.io/wasm-pack/), [Serde](https://serde.rs/)
 -   **Data Source:** [Binance API](https://binance-docs.github.io/apidocs/spot/en/) (via Cloudflare Pages Function proxy)
 

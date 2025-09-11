@@ -133,9 +133,39 @@
 
           <section class="group">
             <div class="group-title">Experimental</div>
+
+            <!-- Round prices to exchange tick -->
             <div class="row row-checkbox">
               <input id="priceToTick" type="checkbox" v-model="priceToTick" class="accent-blue-500" />
               <label for="priceToTick" class="inline-label">Round prices to exchange tick</label>
+
+              <!-- info-ikon -->
+              <span class="tip" tabindex="0">ⓘ
+                <span class="tip-content">
+                  <b>What it does:</b> Rounds all simulated order prices to the exchange's tick size,
+                  always in your disfavor (buy up / sell down).<br>
+                  <b>Use it when:</b> you want exchange-realistic fills.<br>
+                  <b>Turn it OFF</b> to match TradingView Strategy Tester (TV typically doesn't force tick rounding).
+                </span>
+              </span>
+            </div>
+
+            <!-- Match TradingView (Parity) -->
+            <div class="row row-checkbox">
+              <input id="parityMode" type="checkbox" v-model="smaParams.parity_mode" class="accent-blue-500" />
+              <label for="parityMode" class="inline-label">Match TradingView (Parity)</label>
+
+              <!-- info-ikon -->
+              <span class="tip" tabindex="0">ⓘ
+                <span class="tip-content">
+                  <b>Match TradingView (Parity)</b><br>
+                  • MODE 1-3: inkluderer commission og runder qty ned til exchange step.<br>
+                  • MODE 4 (Explicit, qty settes i strategy.entry): ingen fee/step.<br>
+                  • MODE 5 (Risk-Based SL/TP): ingen step på qty.<br>
+                  <b>Round prices to exchange tick</b>.
+                  Runder priser (entry/exit/SL/TP) til tick i din disfavør. Påvirker ikke close[1] i sizing.
+                </span>
+              </span>
             </div>
           </section>
 
@@ -170,7 +200,7 @@
                   <b>MODE 3: USDT</b> - fast verdi i quote.<br>
                   <b>MODE 4: Explicit quantity (x)</b> - <code>qty = equity[1]/close[1] × gearing</code>.
                   <hr style="border-color:#333; margin:6px 0;">
-                  <b>Risk-Based</b>: posisjonsstørrelsen beregnes automatisk fra <i>Risk per Trade %</i> og <i>ATR</i>.
+                  <b>MODE 5: Risk-Based SL/TP</b>: qty beregnes aut. fra <i>Risk per Trade %</i> og <i>ATR</i>.
                 </span>
               </span>              
             </div>
@@ -276,7 +306,7 @@
                 <td>{{ signalLabel(trade.exit) }}</td>                         
                 <td>{{ trade.exit.price.toFixed(2) }} {{ quoteCurrency }}</td>
                 <td :rowspan="2" style="text-align:center">
-                  <div>{{ trade.exit.quantity.toFixed(3) }}</div>
+                  <div>{{ trade.exit.quantity.toFixed(2) }}</div>
                   <div class="percent-value">{{ (trade.positionValue/1000).toFixed(2) }}k&nbsp;{{ quoteCurrency }}</div>
                 </td>
 
@@ -343,7 +373,7 @@
 
                 <!-- Quantity/pos-verdi over to rader -->
                 <td :rowspan="2" style="text-align:center">
-                  <div>{{ trade.entry.quantity.toFixed(3) }}</div>
+                  <div>{{ trade.entry.quantity.toFixed(2) }}</div>
                   <div class="percent-value">{{ (trade.positionValue/1000).toFixed(2) }}k&nbsp;{{ quoteCurrency }}</div>
                 </td>
 
@@ -426,6 +456,9 @@ import type {
 const cent  = (x: number) => Math.round(x * 100)  / 100;   // 2 desimaler
 const milli = (x: number) => Math.round(x * 1000) / 1000;  // 3 desimaler
 const pct2  = (x: number) => Math.round(x * 100)  / 100;   // prosent → 2 des.
+// Eksakt cents-summering (unngår 0.01-drift fra flyttall)
+const toCents   = (x: number) => Math.round(x * 100); // -> heltall
+const fromCents = (c: number) => c / 100;
 
 // Normaliser SignalType fra Rust til en enkel nøkkel
 function normSignal(ev: TradeEvent | undefined): string {
@@ -464,6 +497,7 @@ function signalLabel(ev: TradeEvent): string {
     tp: 'TP',
     // Entry/Exit
     reversal: 'Reversal',
+    closeopposite: 'Close Opposite',
   };
 
   const reason = TITLE[key] ?? '';
@@ -504,22 +538,21 @@ const emaVwapParams = reactive<EmaVwapParams>({
 
 // Bruk useBacktest composable
 const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaVwapBacktest } = useBacktest();
-// const { klines: debugKlines, loadKlines: debugLoadKlines } = useKlines(); 
 
 // --- Input variabler ---
 const symbol = ref('SOLUSDT');
 const timeframe = ref('1h'); 
-const dataLimitForFetch = ref(14504);
+const dataLimitForFetch = ref(14877);
 const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini');
 
 // `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
 const smaParams = reactive<SmaParams>({ 
-  fast_period: 300,  // 10
-  slow_period: 3000,  // 64
-  // order_size_mode: OrderSizeMode.PercentOfEquity,
-  // order_size_value: 100, // 100% av equity  
-  order_size_mode: OrderSizeMode.ExplicitQty,
-  order_size_value: 1.0, // gearing 1x (2.0 for 2×, osv.)  
+  fast_period: 10,  // 10
+  slow_period: 73,  // 64, 73
+  order_size_mode: OrderSizeMode.PercentOfEquity,
+  order_size_value: 100, // 100% av equity  
+  // order_size_mode: OrderSizeMode.ExplicitQty,
+  // order_size_value: 1.0, // gearing 1x (2.0 for 2×, osv.)  
   sl_tp_method: SlTpMethod.TrailingPercent,
   fixed_sl_perc: 1.0,
   fixed_tp_perc: 2.0,
@@ -533,6 +566,8 @@ const smaParams = reactive<SmaParams>({
   risk_perc: 1.5,
   
   trade_direction: TradeDirectionFilter.Both,
+  use_explicit_qty: false,
+  parity_mode: true,   // default ON to mirror TradingView  
 });
 
 // Aktiv RB? (gjelder nå for både Full og Mini)
@@ -540,7 +575,7 @@ const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBas
 
 const priceToTick = ref(false) 
 const commissionPercent = ref(0.05);
-const slippageTicks = ref(2);
+const slippageTicks = ref(12);
 
 // --- Resultat variabler ---
 const initialCapital = ref(10000); 
@@ -667,10 +702,11 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
       e => e.trade_id === ev.trade_id && e.event_type === 'Exit') 
     });
 
-  const nowTimestamp = computed(() => Date.now());    
+  // const nowTimestamp = computed(() => Date.now());    
 
   // 5.2 Beregn alle feltene
-  let closedCum = 0;
+  // TV-paritet: summer P&L i full presisjon; rund kun når vi viser tallet.
+  let closedCumPrecise = 0;
 
 const calc: ProcessedTrade[] = grouped.map(t => {
   const closed   = !!t.exit;
@@ -689,20 +725,27 @@ const calc: ProcessedTrade[] = grouped.map(t => {
   const runUpPct  = entryValRaw ? pct2(ruRaw  / entryValRaw * 100)   : 0;
   const drawDnPct = entryValRaw ? pct2(ddRaw  / entryValRaw * 100)   : 0;
 
-  // ---------- 3. Rund tallene til visning --------------------------------
-  const priceEntryDisp = cent(t.entry.price);
-  const priceExitDisp  = closed ? cent(t.exit!.price) : priceEntryDisp;
-  const quantityDisp    = milli(quantityRaw);
-  const pnlDisp    = cent(pnlRaw);
-  const runUpDisp  = cent(ruRaw);
-  const drawDnDisp = cent(ddRaw);
-  // const entryVal   = priceEntryDisp * quantityDisp;    // bare til info i tabellen
-  const entryVal   = entryValRaw; // = priceRaw * quantityRaw (allerede beregnet over)
+  // ---------- 3. Rund pr rad til CENTS først (integer) -------------------
+  const pnlCents = toCents(pnlRaw);
+  const ruCents  = toCents(ruRaw);
+  const ddCents  = toCents(ddRaw);
 
-  // ---------- 4. Kumulativ PnL, fortsatt i cent ---------------------------
-  if (closed) closedCum += pnlDisp;
-  const cumPnl = closed ? closedCum : closedCum + pnlDisp;
-  const cumPct = pct2(cumPnl / initialCapital.value * 100);
+  // Deretter konverter til visningsverdi i USDT
+  const pnlDisp    = fromCents(pnlCents);
+  const runUpDisp  = fromCents(ruCents);
+  const drawDnDisp = fromCents(ddCents);
+
+  // (Entry/Exit-priser beholdes som før – de formatteres med toFixed(2) i tabellen)
+  const priceEntryDisp = cent(t.entry.price);
+  const quantityDisp    = milli(quantityRaw);
+  const entryVal   = entryValRaw; 
+
+  // ---------- 4. Kumulativ PnL (full presisjon), rund KUN ved visning ----
+  if (closed) closedCumPrecise += pnlRaw;                         // <- use raw P&L
+  const cumPrecise = closed ? closedCumPrecise
+                            : closedCumPrecise + pnlRaw;          // include open trade's raw P&L in its own row
+  const cumPnlDisp = cent(cumPrecise);                            // display value
+  const cumPct     = pct2((cumPrecise / initialCapital.value) * 100);
 
   return {
     ...t,
@@ -712,16 +755,15 @@ const calc: ProcessedTrade[] = grouped.map(t => {
     returnPercent         : returnPct,
     runUpPercent          : runUpPct,
     drawdownPercent       : drawDnPct,
-    cumulativePnl         : cumPnl,
+    cumulativePnl         : cumPnlDisp,
     cumulativePnlPercent  : cumPct,
 
     // tallene du faktisk viser i cellene
     entry: { ...t.entry, price: priceEntryDisp, quantity: quantityDisp },
     exit : t.exit ? { ...t.exit,
-                      price: priceExitDisp, // evt. exit.priceDisp
                       quantity: quantityDisp,
-                      pnl  : pnlDisp,
-                      run_up_amount   : runUpDisp,
+                      pnl  : pnlDisp,                // per-trade cell stays rounded
+                      run_up_amount   : runUpDisp,   // ditto
                       drawdown_amount : drawDnDisp } : undefined
   };
 });
@@ -1049,7 +1091,7 @@ tr > td:nth-child(4)  /* Date/Time */
 }
 .tip-content {
   position:absolute; left:50%; transform:translateX(-50%);
-  bottom:130%; min-width:650px; max-width:650px; padding:8px 10px; border-radius:6px;
+  bottom:130%; min-width:590px; max-width:590px; padding:8px 10px; border-radius:6px;
   background:#111; color:#eee; border:1px solid #444; box-shadow:0 6px 20px rgba(0,0,0,.35);
   opacity:0; pointer-events:none; transition:opacity .12s ease; z-index:10; white-space:normal;
 }

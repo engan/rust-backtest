@@ -94,7 +94,7 @@ export function useBacktest() {
       const flags: RoundingFlags = {
         price_to_tick: opt.priceToTick,
         quantity_step: false,
-        sl_tp_tick: false,
+        sl_tp_tick: false,  // TEST
       };
 
       // Kaller den nye Wasm-funksjonen
