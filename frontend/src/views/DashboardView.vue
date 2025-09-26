@@ -84,33 +84,39 @@
             <!-- Trailing -->
             <div v-if="smaParams.sl_tp_method === SlTpMethod.TrailingPercent" class="method-rows">
               <div class="row"><label>Trailing SL %:</label><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc"></div>
-              <div class="row"><label>Trailing TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
+              <div class="row"><label>Static TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
             </div>
 
             <!-- Combined -->
             <div v-if="smaParams.sl_tp_method === SlTpMethod.Combined" class="method-rows">
               <div class="row"><label>Fixed SL %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc"></div>
               <div class="row"><label>Trailing SL %:</label><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc"></div>
-              <div class="row"><label>Trailing TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
+              <div class="row"><label>Static TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
             </div>
           </section>
 
-          <!-- Risk & Position Sizing (kun RB) -->
-          <section class="group" v-if="smaParams.sl_tp_method === SlTpMethod.RiskBased">
+          <!-- Risk & Position Sizing (RB + MODE 4) -->
+          <section class="group" v-if="showRiskPanel">
             <div class="group-title">Risk &amp; Position Sizing</div>
-            <div class="row">
+
+            <!-- Kun for Risk-Based -->
+            <div class="row" v-if="isRiskBased">
               <label for="sma_atr_len">ATR Length:</label>
-              <input id="sma_atr_len" type="number" v-model.number="smaParams.atr_length">
+              <input id="sma_atr_len" type="number" v-model.number="smaParams.atr_length" />
             </div>
-            <div class="row">
+
+            <!-- Vis ved Risk-Based OG/ELLER MODE 4 (Explicit quantity) -->
+            <div class="row" v-if="showRiskGearing">
               <label for="sma_risk_gearing">Risk Gearing (x):</label>
               <select id="sma_risk_gearing" v-model.number="smaParams.risk_gearing">
                 <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
               </select>
             </div>
-            <div class="row">
+
+            <!-- Kun for Risk-Based -->
+            <div class="row" v-if="isRiskBased">
               <label for="sma_risk_perc">Risk per Trade %:</label>
-              <input id="sma_risk_perc" type="number" step="0.1" v-model.number="smaParams.risk_perc">
+              <input id="sma_risk_perc" type="number" step="0.1" v-model.number="smaParams.risk_perc" />
             </div>
           </section>
         </fieldset>
@@ -136,8 +142,14 @@
 
             <!-- Round prices to exchange tick -->
             <div class="row row-checkbox">
-              <input id="priceToTick" type="checkbox" v-model="priceToTick" class="accent-blue-500" />
-              <label for="priceToTick" class="inline-label">Round prices to exchange tick</label>
+              <input id="priceToTick"
+                    type="checkbox"
+                    v-model="priceToTick"
+                    class="accent-blue-500"
+                    :disabled="smaParams.parity_mode" />
+              <label for="priceToTick" class="inline-label">
+                Round prices to exchange tick
+              </label>
 
               <!-- info-ikon -->
               <span class="tip" tabindex="0">ⓘ
@@ -162,8 +174,7 @@
                   • MODE 1-3: inkluderer commission og runder qty ned til exchange step.<br>
                   • MODE 4 (Explicit, qty settes i strategy.entry): ingen fee/step.<br>
                   • MODE 5 (Risk-Based SL/TP): ingen step på qty.<br>
-                  <b>Round prices to exchange tick</b>.
-                  Runder priser (entry/exit/SL/TP) til tick i din disfavør. Påvirker ikke close[1] i sizing.
+                  <b>Nivåer</b> (SL/TP) kvantiseres til tick; <b>fills</b> rundes ikke (stop har slippage, tp fylles på nivå). Påvirker ikke close[1] i sizing.<br>
                 </span>
               </span>
             </div>
@@ -183,9 +194,9 @@
               <input id="initial-capital" type="number" v-model.number="initialCapital" />
               <span v-if="isRiskBased" class="hint"> Disabled when Risk-Based sizing active!</span>
             </div>
-            <div class="row" :class="{ 'row-disabled': isRiskBased }">
+            <div class="row" :class="{ 'row-disabled': disableOrderSizeValue }">
               <label for="order-size-value">Order Size:</label>
-              <input id="order-size-value" type="number" v-model.number="smaParams.order_size_value" :disabled="isRiskBased" />
+              <input id="order-size-value" type="number" v-model.number="smaParams.order_size_value" :disabled="disableOrderSizeValue" />
               <select v-model="smaParams.order_size_mode" :disabled="isRiskBased" style="margin-left:8px;">
                 <option :value="OrderSizeMode.PercentOfEquity">% of equity</option>
                 <option :value="OrderSizeMode.FixedQuantity">Quantity</option>
@@ -198,7 +209,7 @@
                   <b>MODE 1: % of equity</b> - bruker default_quantity (100% = all-in).<br>
                   <b>MODE 2: Quantity</b> - fast antall enheter.<br>
                   <b>MODE 3: USDT</b> - fast verdi i quote.<br>
-                  <b>MODE 4: Explicit quantity (x)</b> - <code>qty = equity[1]/close[1] × gearing</code>.
+                  <b>MODE 4: Explicit quantity (x)</b> - <code>qty = equity[2]/close[2] x gearing</code>.
                   <hr style="border-color:#333; margin:6px 0;">
                   <b>MODE 5: Risk-Based SL/TP</b>: qty beregnes aut. fra <i>Risk per Trade %</i> og <i>ATR</i>.
                 </span>
@@ -244,7 +255,9 @@
         </div>
         <div>
           <strong>Profitable trades:</strong><br />{{
-            (results.summary.profitable_trades / results.summary.total_trades * 100).toFixed(2)
+            results.summary.total_trades
+              ? (results.summary.profitable_trades / results.summary.total_trades * 100).toFixed(2)
+              : '0.00'
           }}% ({{ results.summary.profitable_trades }})
         </div>
         <div>
@@ -279,7 +292,7 @@
             <th>Signal</th>
             <th>Price</th>
             <th style="text-align: center">Position size</th>
-            <th style="text-align: center">P&L</th>
+            <th style="text-align: center">Net P&L</th>
             <th style="text-align: center">Run-up</th>
             <th style="text-align: center">Drawdown</th>
             <th style="text-align: center">Cumulative P&L</th>
@@ -310,27 +323,27 @@
                   <div class="percent-value">{{ (trade.positionValue/1000).toFixed(2) }}k&nbsp;{{ quoteCurrency }}</div>
                 </td>
 
-                <!-- P&L med % -->
+                <!-- Net P&L med % -->
                 <td :rowspan="2" :class="{ profit: trade.exit.pnl! > 0, loss: trade.exit.pnl! < 0 }">
                   <div>{{ trade.exit.pnl?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <!-- <div class="percent-value" :class="{ profit: (trade.pnlPercent ?? 0) > 0, loss: (trade.pnlPercent ?? 0) < 0 }">
-                    {{ trade.pnlPercent?.toFixed(2) }}%
-                  </div> -->
-                  <div class="percent-value" :class="{ profit: (trade.returnPercent ?? 0) > 0, loss: (trade.returnPercent ?? 0) < 0 }">
-                    {{ trade.returnPercent?.toFixed(2) }}%
-                  </div>                  
+                  <div class="percent-value" :class="{ profit: (trade.pnlPercent ?? 0) > 0, loss: (trade.pnlPercent ?? 0) < 0 }">
+                    {{ tvFmt2(trade.pnlPercent) }}%
+                  </div>
+                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->           
                 </td>
 
                 <!-- Run-up med % -->
                 <td :rowspan="2">
                    <div>{{ trade.exit.run_up_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                   <div class="percent-value">{{ trade.runUpPercent?.toFixed(2) }}%</div>
+                   <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
+                   <!-- <div class="percent-value percent-small">{{ trade.runUpPercent4?.toFixed(4) }}%</div> -->
                 </td>
 
                 <!-- Drawdown med % -->
                 <td :rowspan="2">
                    <div>-{{ trade.exit.drawdown_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                   <div class="percent-value">-{{ trade.drawdownPercent?.toFixed(2) }}%</div>
+                   <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
+                   <!-- <div class="percent-value percent-small">-{{ trade.drawdownPercent4?.toFixed(4) }}%</div> -->
                 </td>
                 
                 <!-- Cumulative P&L -->
@@ -380,21 +393,22 @@
                 <!-- P&L (åpen) over to rader, som i TV -->
                 <td :rowspan="2" :class="{ profit: (trade.entry.pnl ?? 0) > 0, loss: (trade.entry.pnl ?? 0) < 0 }">
                   <div>{{ trade.entry.pnl?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value" :class="{ profit: (trade.returnPercent ?? 0) > 0, loss: (trade.returnPercent ?? 0) < 0 }">
-                    {{ trade.returnPercent?.toFixed(2) }}%
+                  <div class="percent-value" :class="{ profit: (trade.pnlPercent ?? 0) > 0, loss: (trade.pnlPercent ?? 0) < 0 }">
+                    {{ trade.pnlPercent?.toFixed(2) }}%
                   </div>
+                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->                 
                 </td>
 
                 <!-- Run-up (over to rader) -->
                 <td :rowspan="2">
                   <div>{{ trade.entry.run_up_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value">{{ trade.runUpPercent?.toFixed(2) }}%</div>
+                  <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
                 </td>
 
                 <!-- Drawdown (over to rader) -->
                 <td :rowspan="2">
                   <div>-{{ trade.entry.drawdown_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value">-{{ trade.drawdownPercent?.toFixed(2) }}%</div>
+                  <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
                 </td>
 
                 <!-- Cumulative P&L (over to rader) -->
@@ -453,12 +467,52 @@ import type {
 /* ------------------------------------------------------------------
    1.  HJELPE-FUNKSJONER FOR AVRUNDING OG SIGNAL TEKST
 --------------------------------------------------------------------*/
-const cent  = (x: number) => Math.round(x * 100)  / 100;   // 2 desimaler
-const milli = (x: number) => Math.round(x * 1000) / 1000;  // 3 desimaler
-const pct2  = (x: number) => Math.round(x * 100)  / 100;   // prosent → 2 des.
-// Eksakt cents-summering (unngår 0.01-drift fra flyttall)
-const toCents   = (x: number) => Math.round(x * 100); // -> heltall
-const fromCents = (c: number) => c / 100;
+// Rounding: half-away-from-zero (TV-konsistent)
+const roundN = (x: number, n: number) => {
+  const m = Math.pow(10, n);
+  return (x >= 0 ? Math.round(x * m) : -Math.round(-x * m)) / m;
+};
+const priceDecimals = ref(2);
+const qtyDecimals   = ref(2);
+const pow10 = (n: number) => Math.pow(10, n);
+
+const cent  = (x: number) => roundN(x, 2);   // 2 desimaler (beløp – "valuta")
+// Hjelpere for 2/4 desimalers avrunding (TV-stil)
+const r2 = (x:number) => roundN(x, 2);
+const r4 = (x:number) => roundN(x, 4);
+
+// TV-basis for prosent: entry pris rundet til tick  ×  qty trunket til step
+const tvBasisRaw = (entryPrice:number, entryQty:number) => {
+  const p = roundN(entryPrice, priceDecimals.value);
+  const q = truncN(entryQty,   qtyDecimals.value);
+  return p * q;                 // rå basis (ikke r2)
+};
+const tvBasisDisp = (entryPrice:number, entryQty:number) => r2(tvBasisRaw(entryPrice, entryQty));
+
+// const milli = (x: number) => roundN(x, 3);   // 3 desimaler (qty)
+const pct2  = (x: number) => roundN(x, 2);   // 2 desimaler (prosent, brukes f.eks. på cumulative)
+// Trunkering (mot 0) til n desimaler – matcher TV når qty har step 0.01
+const truncN = (x: number, n: number) =>
+  (x >= 0 ? Math.trunc(x * 10 ** n) : Math.ceil(x * 10 ** n)) / 10 ** n;
+
+// Prosenter vises allerede med riktig avrunding (half-away) → kun "safe to string".
+const tvFmt2 = (x?: number) => {
+  if (x === undefined || x === null || !isFinite(x)) return '0.00';
+  const safe = Math.abs(x) < 0.005 ? 0 : x; // unngå "-0.00"
+  return roundN(safe, 2).toFixed(2);
+};
+
+// Prosent slik TV kalkulerer:
+//  • 4dp:  amount / tvBasisRaw * 100  → r4
+//  • 2dp: (r2(amount) / tvBasisDisp) * 100  → r2
+const tvPercent4dp = (amount:number, entryPrice:number, entryQty:number) => {
+  const base = tvBasisRaw(entryPrice, entryQty);
+  return base ? r4((amount / base) * 100) : 0;
+};
+const tvPercent2dp = (amount:number, entryPrice:number, entryQty:number) => {
+  const base = tvBasisDisp(entryPrice, entryQty);
+  return base ? r2((r2(amount) / base) * 100) : 0;
+};
 
 // Normaliser SignalType fra Rust til en enkel nøkkel
 function normSignal(ev: TradeEvent | undefined): string {
@@ -542,13 +596,13 @@ const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaV
 // --- Input variabler ---
 const symbol = ref('SOLUSDT');
 const timeframe = ref('1h'); 
-const dataLimitForFetch = ref(14877);
+const dataLimitForFetch = ref(15214);
 const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini');
 
 // `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
 const smaParams = reactive<SmaParams>({ 
-  fast_period: 10,  // 10
-  slow_period: 73,  // 64, 73
+  fast_period: 50,  // 10
+  slow_period: 300,  // 64, 73
   order_size_mode: OrderSizeMode.PercentOfEquity,
   order_size_value: 100, // 100% av equity  
   // order_size_mode: OrderSizeMode.ExplicitQty,
@@ -560,10 +614,10 @@ const smaParams = reactive<SmaParams>({
   fixed_tp_for_trailing_perc: 5.0,
   // full-strategi felt …
   atr_length: 14,
-  reward_mult_rb: 2.0,
-  atr_mult_rb: 1.5,
+  reward_mult_rb: 1.4,
+  atr_mult_rb: 1.8,
   risk_gearing: 1,
-  risk_perc: 1.5,
+  risk_perc: 1.2,
   
   trade_direction: TradeDirectionFilter.Both,
   use_explicit_qty: false,
@@ -573,9 +627,22 @@ const smaParams = reactive<SmaParams>({
 // Aktiv RB? (gjelder nå for både Full og Mini)
 const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBased);
 
+// MODE 4 / Explicit quantity valgt?
+const isExplicitQty = computed(
+  () => smaParams.order_size_mode === OrderSizeMode.ExplicitQty
+);
+
+// Gearing skal synes både for Risk-Based og MODE 4
+const showRiskGearing = computed(() => isRiskBased.value || isExplicitQty.value);
+
+// Vis hele gruppen så lenge noe inni bør synes
+const showRiskPanel = computed(() => showRiskGearing.value || isRiskBased.value);
+
+const disableOrderSizeValue = computed(() => isRiskBased.value || isExplicitQty.value);
+
 const priceToTick = ref(false) 
 const commissionPercent = ref(0.05);
-const slippageTicks = ref(12);
+const slippageTicks = ref(2);
 
 // --- Resultat variabler ---
 const initialCapital = ref(10000); 
@@ -617,6 +684,18 @@ const runBacktest = async () => {
   try {
     // Dynamisk tick size hentes fra API
     const filters = await fetchSymbolFilters(symbol.value);
+    // hent antall desimaler fra tick/step (robust for 0.1, 0.01, 0.0001, osv.)
+    const decimalsFromStep = (x: number | string) => {
+      const s = String(x);
+      if (s.includes('e-')) {
+        const m = /e-(\d+)/i.exec(s);
+        return m ? parseInt(m[1], 10) : 0;
+      }
+      const i = s.indexOf('.');
+      return i === -1 ? 0 : s.length - i - 1;
+    };
+    priceDecimals.value = decimalsFromStep(filters.tickSize);
+    qtyDecimals.value   = decimalsFromStep(filters.stepSize);    
     const backtestConfig: BacktestConfig = {
       commission_percent: commissionPercent.value,
       slippage_ticks: slippageTicks.value,
@@ -689,83 +768,114 @@ const formattedTotalPnl = computed(() => {
 /* ------------------------------------------------------------------
    5.  LIST OF TRADES –  NÅ MED «TV-NØYAKTIG» PROSENT
 --------------------------------------------------------------------*/
+// --- (flyttet opp) tvBasisRaw / tvBasisDisp brukes for prosent ---
+
+// --- To uavhengige prosenter slik TV faktisk gjør ---
+// (nå definert som tvPercent4dp / tvPercent2dp over)
+
+// Enkel debug-toggle for prosentberegninger
+const PCT_DEBUG = false;                 // sett true ved feilsøking
+const PCT_DEBUG_IDS = new Set<number>(); // legg inn trade-id'er hvis du vil filtrere
+
 const processedTradeLog = computed<ProcessedTrade[]>(() => {
   if (!results.value?.trade_log) return [];
 
   // 5.1 Gruppe entry/exit
-  const grouped: { entry: TradeEvent; exit?: TradeEvent }[] = [];
-  for (const ev of results.value.trade_log)
-    if (ev.event_type === 'Entry')
-      grouped.push({ 
-        entry: ev, 
-        exit: results.value.trade_log.find(
-      e => e.trade_id === ev.trade_id && e.event_type === 'Exit') 
-    });
-
-  // const nowTimestamp = computed(() => Date.now());    
+  const grouped: { entry: TradeEvent; exit?: TradeEvent }[] = (() => {
+    const byId = new Map<number, { entry?: TradeEvent; exit?: TradeEvent }>();
+    for (const ev of results.value!.trade_log) {
+      const g = byId.get(ev.trade_id) ?? {};
+      if (ev.event_type === 'Entry') g.entry = ev;
+      if (ev.event_type === 'Exit')  g.exit  = ev;
+      byId.set(ev.trade_id, g);
+    }
+    return Array.from(byId.values()).filter(g => g.entry) as any;
+  })();
 
   // 5.2 Beregn alle feltene
   // TV-paritet: summer P&L i full presisjon; rund kun når vi viser tallet.
-  let closedCumPrecise = 0;
+  let closedCumPrecise = 0; 
 
-const calc: ProcessedTrade[] = grouped.map(t => {
-  const closed   = !!t.exit;
+  const barByIndex = new Map(results.value!.bar_log.map(b => [b.bar_index, b]));
 
-  // ---------- 1. Rå tall --------------------------------------------------
-  const pnlRaw   = closed ? t.exit!.pnl!             : t.entry.pnl!;
-  const ruRaw    = closed ? t.exit!.run_up_amount!   : t.entry.run_up_amount!;
-  const ddRaw    = closed ? t.exit!.drawdown_amount! : t.entry.drawdown_amount!;
-  const priceRaw = t.entry.price;                    // alltid entry-price
-  const quantityRaw   = closed ? t.exit!.quantity              : t.entry.quantity;
+  const calc: ProcessedTrade[] = grouped.map(t => {
+    const closed   = !!t.exit;
 
-  const entryValRaw = priceRaw * quantityRaw;             // verdi av posisjonen
+    const pctBaseRaw  = tvBasisRaw(t.entry.price, t.entry.quantity);
+    const pctBaseDisp = tvBasisDisp(t.entry.price, t.entry.quantity);
 
-  // ---------- 2. Prosent basert på rå tall -------------------------------
-  const returnPct = entryValRaw ? pct2(pnlRaw / entryValRaw * 100)   : 0;
-  const runUpPct  = entryValRaw ? pct2(ruRaw  / entryValRaw * 100)   : 0;
-  const drawDnPct = entryValRaw ? pct2(ddRaw  / entryValRaw * 100)   : 0;
+    // ---------- 1. Rå tall --------------------------------------------------
+    const pnlRaw   = closed ? t.exit!.pnl!             : t.entry.pnl!; // inkl. fees (netto)
+    const ruRaw    = closed ? t.exit!.run_up_amount!   : t.entry.run_up_amount!;
+    const ddRaw    = closed ? t.exit!.drawdown_amount! : t.entry.drawdown_amount!;
 
-  // ---------- 3. Rund pr rad til CENTS først (integer) -------------------
-  const pnlCents = toCents(pnlRaw);
-  const ruCents  = toCents(ruRaw);
-  const ddCents  = toCents(ddRaw);
+    // TV-basis for %: ALLTID entry-qty (også på lukkede trades)
+    const qtyForPct = t.entry.quantity;
 
-  // Deretter konverter til visningsverdi i USDT
-  const pnlDisp    = fromCents(pnlCents);
-  const runUpDisp  = fromCents(ruCents);
-  const drawDnDisp = fromCents(ddCents);
+    // ---------- 2. Visningstall + integer-basert % (TV-stil) ---------------
+    // Pris vises rundet til tick, qty vises trunket til step (TV)
+    const priceEntryDisp = roundN(t.entry.price, priceDecimals.value);
+    const priceExitDisp  = closed ? roundN(t.exit!.price, priceDecimals.value) : priceEntryDisp;
+    const qtyDisp        = truncN(qtyForPct, qtyDecimals.value);
 
-  // (Entry/Exit-priser beholdes som før – de formatteres med toFixed(2) i tabellen)
-  const priceEntryDisp = cent(t.entry.price);
-  const quantityDisp    = milli(quantityRaw);
-  const entryVal   = entryValRaw; 
+    const pnlDisp        = cent(pnlRaw);
+    const runUpDisp      = cent(ruRaw);
+    const drawDnDisp     = cent(ddRaw);
 
-  // ---------- 4. Kumulativ PnL (full presisjon), rund KUN ved visning ----
-  if (closed) closedCumPrecise += pnlRaw;                         // <- use raw P&L
-  const cumPrecise = closed ? closedCumPrecise
-                            : closedCumPrecise + pnlRaw;          // include open trade's raw P&L in its own row
-  const cumPnlDisp = cent(cumPrecise);                            // display value
-  const cumPct     = pct2((cumPrecise / initialCapital.value) * 100);
+    // ---------- 3. Prosent (TV-stil) ----------------------------------------
+    // 4dp (rå, vises som "liten" linje)
+    const pnlPct4        = tvPercent4dp(pnlRaw,  t.entry.price, t.entry.quantity);
+    const runUpPct4      = tvPercent4dp(ruRaw,   t.entry.price, t.entry.quantity);
+    const drawDnPct4     = tvPercent4dp(ddRaw,   t.entry.price, t.entry.quantity);
 
-  return {
-    ...t,
+    // 2dp (visningslinjen i fet)
+    const pnlPctDisp2    = tvPercent2dp(pnlRaw,  t.entry.price, t.entry.quantity);
+    const runUpPctDisp2  = tvPercent2dp(ruRaw,   t.entry.price, t.entry.quantity);
+    const drawDnPctDisp2 = tvPercent2dp(ddRaw,   t.entry.price, t.entry.quantity);
+  
+    if (PCT_DEBUG && (!PCT_DEBUG_IDS.size || PCT_DEBUG_IDS.has(t.entry.trade_id))) {
+      console.debug(
+        `[PCTDBG] t#${t.entry.trade_id} expoRaw=${tvBasisRaw(t.entry.price, qtyForPct).toFixed(6)} `
+        + `expoDisp=${tvBasisDisp(t.entry.price, qtyForPct).toFixed(2)} `
+        + `| pnl: ${pnlPctDisp2.toFixed(2)}% (${pnlPct4.toFixed(4)}%) `
+        + `ru: ${runUpPctDisp2.toFixed(2)}% (${runUpPct4.toFixed(4)}%) `
+        + `dd: ${drawDnPctDisp2.toFixed(2)}% (${drawDnPct4.toFixed(4)}%) `
+        + `| amounts: pnl=${cent(pnlRaw).toFixed(2)} ru=${cent(ruRaw).toFixed(2)} dd=${cent(ddRaw).toFixed(2)}`
+      );
+    }
+      
+    // Verdien som vises i "Position size" (kun visning)
+    const entryValDisp = roundN(priceEntryDisp * qtyDisp, 2);
+    // ---------- 4. Kumulativ PnL (full presisjon), rund KUN ved visning ----
+    if (closed) closedCumPrecise += pnlRaw;                         // <- use raw P&L
+    const cumPrecise = closed ? closedCumPrecise
+                              : closedCumPrecise + pnlRaw;          // include open trade's raw P&L in its own row
+    const cumPnlDisp = cent(cumPrecise);                            // display value
+    const cumPct     = pct2((cumPnlDisp / initialCapital.value) * 100); // beholder eksisterende (matcher allerede)
 
-    // verdier som vises i tabellen
-    positionValue         : entryVal,
-    returnPercent         : returnPct,
-    runUpPercent          : runUpPct,
-    drawdownPercent       : drawDnPct,
-    cumulativePnl         : cumPnlDisp,
-    cumulativePnlPercent  : cumPct,
+    return {
+      ...t,
 
-    // tallene du faktisk viser i cellene
-    entry: { ...t.entry, price: priceEntryDisp, quantity: quantityDisp },
-    exit : t.exit ? { ...t.exit,
-                      quantity: quantityDisp,
-                      pnl  : pnlDisp,                // per-trade cell stays rounded
-                      run_up_amount   : runUpDisp,   // ditto
-                      drawdown_amount : drawDnDisp } : undefined
-  };
+      // verdier som vises i tabellen
+      positionValue         : entryValDisp,
+      pnlPercent            : pnlPctDisp2,
+      runUpPercent          : runUpPctDisp2,
+      drawdownPercent       : drawDnPctDisp2,
+      pnlPercent4           : pnlPct4,
+      runUpPercent4         : runUpPct4,
+      drawdownPercent4      : drawDnPct4,  
+      cumulativePnl         : cumPnlDisp,
+      cumulativePnlPercent  : cumPct,
+
+      // tallene du faktisk viser i cellene
+      entry: { ...t.entry, price: priceEntryDisp, quantity: qtyDisp },
+      exit : t.exit ? { ...t.exit,
+                        price: priceExitDisp,
+                        quantity: qtyDisp,             // vis samme qty som entry (TV viser pos-størrelse)
+                        pnl  : pnlDisp,                // per-trade cell stays rounded
+                        run_up_amount   : runUpDisp,   // ditto
+                        drawdown_amount : drawDnDisp } : undefined
+    };
 });
 
   // 5.3  Vis nyeste øverst
@@ -1037,6 +1147,12 @@ button:disabled {
   color: #999; /* En litt svakere farge for prosenter */
   text-align: center;
   font-size: 0.9em;
+}
+
+.percent-small {
+  font-size: 0.85em;
+  opacity: .75;
+  font-variant-numeric: tabular-nums; /* ryddigere kolonne */
 }
 
 /* Tabell-styling */

@@ -33,8 +33,11 @@ export interface TradeEvent {
   price: number;
   quantity: number;
   pnl?: number;
+  pnl_percent?: number | null;
   run_up_amount?: number;
+  run_up_percent?: number | null;
   drawdown_amount?: number;  
+  drawdown_percent?: number | null;
 }
 
 export interface EquityPoint {
@@ -192,11 +195,17 @@ export interface ProcessedTrade {
 
   positionValue: number; // NYTT 
   
-  // Nye, beregnede egenskaper (valgfrie siden de kun gjelder lukkede handler)
-  returnPercent?: number;
+  // Nye, beregnede egenskaper 
+  // (valgfrie siden de kun gjelder lukkede handler)
   pnlPercent?: number;
   runUpPercent?: number;
   drawdownPercent?: number;
+
+  // DEBUG/visning i 4 des
+  pnlPercent4?: number;
+  runUpPercent4?: number;
+  drawdownPercent4?: number;
+
   cumulativePnl?: number;
   cumulativePnlPercent?: number;
 }
