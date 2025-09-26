@@ -8,7 +8,9 @@ This repository hosts a high-performance web-based dashboard for backtesting tra
 
 The core backtesting, strategy implementations, and advanced quantitative analysis logic for this dashboard are developed and maintained in a separate, **private repository**: [`engan/rust-backtest-proprietary`](https://github.com/engan/rust-backtest-proprietary). This separation protects the intellectual property of the engine's core algorithms.
 
-![Image](https://github.com/user-attachments/assets/9b5f58e1-48b0-4773-b8c5-a3a0a0cab33f)
+![Image](https://github.com/user-attachments/assets/4de5b02b-c92d-4143-9b62-56496f0125c6)
+
+![Image](https://github.com/user-attachments/assets/19c43a09-bdcf-4d01-9511-7fa9ff679734)
 
 _Image: TradingView (bottom) vs. Rust/Wasm engine (top).  
 All metrics — Total P&L, Max equity drawdown, Profit factor — **and** every trade-level value (Qty, Net P&L, Run-up, Drawdown, Cumulative P&L) match **exactly** (cent & percent)._
@@ -165,4 +167,5 @@ License 📄
 This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/url?sa=E&q=LICENSE.md) file for details.
 
 ----------
+
 Feel free to contribute or report issues!
