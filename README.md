@@ -77,13 +77,14 @@ sequenceDiagram
        alt="Equity curve parity between Rust/Wasm backtester and TradingView">
   <figcaption><em>Equity & overview parity — The Rust/Wasm backtester (top) reproduces TradingView’s Strategy Tester (bottom) for the same symbol, timeframe and costs. Total P&amp;L, Max equity drawdown and Profit factor align exactly.</em></figcaption>
   </figure>
-<br><br>
+<br><br><br>
 <figure>
   <img src="https://github.com/user-attachments/assets/19c43a09-bdcf-4d01-9511-7fa9ff679734"
        alt="Trade-by-trade parity: list of trades comparison">
   <figcaption><em>Trade-by-trade parity — Every row matches: side, price, position size, Net P&amp;L, Run-up (MFE), Drawdown (MAE) and Cumulative P&amp;L, down to the cent and percent rounding conventions.</em></figcaption>
 </figure>
-<br>
+<br><br>
+
 ### Data Limit (automatic)
 
 For the selected timeframe, **Bars LIVE** is computed from a fixed start (01‑Jan‑2024 UTC) to now. We add a **warmup** length for indicators before the first valid trade:
