@@ -4,7 +4,10 @@
 
 A web dashboard for **precise and fast** backtesting of trading strategies. The UI is built with **Vue 3 + TypeScript**, while the computation core runs in a separate **Rust/WebAssembly** (Wasm) engine that executes in the browser. Outputs and trade logs are designed for **parity with TradingView** (Strategy Tester). The frontend plots with **TradingView Lightweight Charts™** for clear and responsive visualization.
 
-> **Note**: The core backtesting engine lives in a private repository: `engan/rust-backtest-proprietary`. This README covers the public frontend and serverless functions.
+> **Note**: The core backtesting engine lives in a private repository: `engan/rust-backtest-proprietary`.
+> For convenience, the **compiled Wasm artifacts are vendored** into this public repo under
+> `frontend/src/rust/pkg/`, so you can run the app without access to the private source.
+> This README covers the public frontend and serverless functions.
 
 ---
 
@@ -133,7 +136,7 @@ rust-backtest/
 │       │   ├── useBacktest.ts      # Calls Wasm and binds results to UI
 │       │   └── useKlines.ts        # Helpers for klines
 │       ├── router/
-│       ├── rust/pkg/               # Wasm artifacts from the private engine
+│       ├── rust/pkg/               # Vendored Wasm artifacts (compiled engine)
 │       ├── services/
 │       │   ├── binanceAPI.ts       # REST calls + symbol filters (tick/step)
 │       │   └── tvPreset.ts         # Store/load TV preset in localStorage
@@ -153,33 +156,62 @@ rust-backtest/
 
 * Node.js + pnpm
 * Basic understanding of **Vue 3** and **Rust/Wasm**
+* No private access required — the compiled Wasm files are already included
 
-### 1) Build the Wasm engine (private repo)
+### 1) Clone this repository
 
 ```bash
-# in the parent folder of this project
-git clone https://github.com/engan/rust-backtest-proprietary.git   # private
-cd rust-backtest-proprietary
+git clone https://github.com/engan/rust-backtest.git
+cd rust-backtest
+```
+
+### 2) Wasm engine
+
+The compiled engine is **already present** here:
+```
+frontend/src/rust/pkg/
+├─ rust_backtest_proprietary_bg.wasm
+├─ rust_backtest_proprietary_bg.wasm.d.ts
+├─ rust_backtest_proprietary.d.ts
+└─ rust_backtest_proprietary.js
+```
+
+You can run the app as-is.  
+**Optional (advanced):** If you have access to the private engine and want to
+replace the vendored build with your own:
+
+Unix/macOS:
+```bash
+# from your private build folder
 wasm-pack build --target web
-# copy artifacts into the frontend project
 cp ./pkg/*.{js,wasm,d.ts} ../rust-backtest/frontend/src/rust/pkg/
 ```
 
-### 2) Install dependencies
+Windows (PowerShell):
+```powershell
+wasm-pack build --target web
+Copy-Item .\pkg\rust_backtest_proprietary_* ..\rust-backtest\frontend\src\rust\pkg\
+```
+
+> The vendored binaries are provided for runtime convenience only and may be
+> subject to additional licensing terms. Do not redistribute them outside this repository.
+
+### 3) Install dependencies
 
 ```bash
-pnpm install           # at the repository root
+# at the repository root
+pnpm install           
 cd frontend && pnpm install
 ```
 
-### 3) Run locally
+### 4) Run locally
 
 ```bash
 cd frontend
 pnpm run dev
 ```
 
-### 4) Build & preview
+### 5) Build & preview
 
 ```bash
 cd frontend
@@ -187,7 +219,9 @@ pnpm build
 pnpm preview
 ```
 
-Open the URL printed by Vite (typically `http://localhost:5173` for dev, `http://localhost:4173` for preview).
+Open the URL printed by Vite, typically  
+`http://localhost:5173` for dev,  
+`http://localhost:4173` for preview. 
 
 ---
 
