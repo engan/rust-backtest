@@ -166,15 +166,6 @@ function debugString(val) {
     // TODO we could test for more things here, like `Set`s and `Map`s.
     return className;
 }
-/**
- * @param {any} data_js
- * @param {number} period
- * @returns {any}
- */
-export function calculate_ema_debug(data_js, period) {
-    const ret = wasm.calculate_ema_debug(data_js, period);
-    return ret;
-}
 
 function takeFromExternrefTable0(idx) {
     const value = wasm.__wbindgen_export_4.get(idx);
@@ -213,6 +204,18 @@ export function run_sma_crossover_mini_backtest(klines_js, config_js, initial_ca
 }
 
 /**
+ * @param {any} params_js
+ * @returns {number}
+ */
+export function compute_warmup_bars_for_mini(params_js) {
+    const ret = wasm.compute_warmup_bars_for_mini(params_js);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return ret[0] >>> 0;
+}
+
+/**
  * @param {any} klines_js
  * @param {any} config_js
  * @param {number} initial_capital
@@ -225,6 +228,16 @@ export function run_ema_vwap_strategy(klines_js, config_js, initial_capital, par
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} data_js
+ * @param {number} period
+ * @returns {any}
+ */
+export function calculate_ema_debug(data_js, period) {
+    const ret = wasm.calculate_ema_debug(data_js, period);
+    return ret;
 }
 
 async function __wbg_load(module, imports) {
@@ -337,6 +350,9 @@ function __wbg_get_imports() {
         return ret;
     };
     imports.wbg.__wbg_log_65f6864e580ee006 = function(arg0, arg1) {
+        console.log(getStringFromWasm0(arg0, arg1));
+    };
+    imports.wbg.__wbg_log_919539419eed00ef = function(arg0, arg1) {
         console.log(getStringFromWasm0(arg0, arg1));
     };
     imports.wbg.__wbg_new_405e22f390576ce2 = function() {

@@ -103,9 +103,9 @@ export interface SmaParams {
   risk_gearing: number,
   risk_perc: number;
   trade_direction: TradeDirectionFilter;
-
-  use_explicit_qty?: boolean; // mirrors Pine's "Use explicit qty" toggle
-  parity_mode?: boolean;      // Match TradingView sizing behaviour
+  parity_mode?: boolean;
+  fashionably_late_mode: FashionablyLateMode,
+  atr_threshold_fl: number,  
 }
 
 // NYTT: Definer typen for de minimale parameterne.
@@ -149,7 +149,7 @@ export enum FashionablyLateMode {
   Off = 'Off',
   OnClose = 'OnClose',
   OnHighLow = 'OnHighLow',
-  ATR = 'ATR',
+  Atr = 'Atr',
 }
 
 export enum SlTpMethod {

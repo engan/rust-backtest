@@ -15,7 +15,8 @@ export interface SymbolFilters {
 }
 
 // Definerer (delvis) strukturen på rådata fra Binance API
-// [Open time, Open, High, Low, Close, Volume, Close time, Quote asset volume, Number of trades, Taker buy base asset volume, Taker buy quote asset volume, Ignore]
+// [Open time, Open, High, Low, Close, Volume, Close time, Quote asset volume, 
+// Number of trades, Taker buy base asset volume, Taker buy quote asset volume, Ignore]
 type BinanceRawKline = [
   number, // Open time
   string, // Open
@@ -249,6 +250,49 @@ export async function fetchSymbolFilters(symbol: string): Promise<SymbolFilters>
     // Returner fornuftige standardverdier ved feil
     return { tickSize: 0.01, stepSize: 0.01 }; 
   }
+}
+
+// === NEW: Universal helper to compute how many klines to fetch so that
+// Rust processes exactly TradingView's "Bars LIVE" ===
+/**
+ * Hvor mange klines må vi hente for å speile TradingView sin Bars LIVE?
+ * Formula must mirror Rust:
+ *
+ *   warmup  = max(slow_period, max(0, atr_length-1))
+ *   start_i = warmup + 2
+ *   totalLimit (=dataLimit we fetch) = barsLive + start_i + (includeExtraLiveBar ? 1 : 0)
+ *
+ * @param barsLive TradingView’s “Bars LIVE” du ønsker å prosessere i Rust
+ * @param slowPeriod params.slow_period (SMA slow)
+ * @param atrLength  params.atr_length (0 hvis ikke brukt)
+ * @param includeExtraLiveBar hent 1 ekstra “live” bar (normalt false)
+ */
+export function requiredDataLimit(
+  barsLive: number,
+  slowPeriod: number,
+  atrLength: number,
+  includeExtraLiveBar: boolean = false
+): number {
+  const warmup = Math.max(slowPeriod, Math.max(0, atrLength - 1));
+ const start_i = warmup + 2; // pga bruk av [i-1] og [i-2] i strategien
+  return barsLive + start_i + (includeExtraLiveBar ? 1 : 0);
+}
+
+// (Optional) Convenience wrapper som beregner totalLimit for deg.
+export async function fetchKlinesForStrategy(
+  symbol: string,
+  interval: string,
+  barsLive: number,
+  params: { slow_period: number; atr_length: number },
+  includeExtraLiveBar: boolean = false
+) {
+  const totalLimit = requiredDataLimit(
+    barsLive,
+    params.slow_period,
+    params.atr_length,
+    includeExtraLiveBar
+  );
+  return fetchBinanceKlines(symbol, interval, totalLimit);
 }
 
 // --- Viktige Merknader ---
