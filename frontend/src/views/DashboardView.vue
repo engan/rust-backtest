@@ -39,17 +39,18 @@
               </select>
 
               <!-- lite info-ikon -->
-              <span class="tip" tabindex="0" style="margin-left:6px"> ⓘ
+              <span class="tip" tabindex="0" style="margin-left: 6px">
+                ⓘ
                 <span class="tip-content">
-                  <b>Default: 'Both'.</b><br>
-                  - <b>Both:</b> Allows both long and short trades<br>
-                  - <b>Long:</b> Only long trades<br>
+                  <b>Default: 'Both'.</b><br />
+                  - <b>Both:</b> Allows both long and short trades<br />
+                  - <b>Long:</b> Only long trades<br />
                   - <b>Short:</b> Only short trades
                 </span>
               </span>
             </div>
-          </section>  
-          
+          </section>
+
           <!-- Fashionably Late Trade Mode -->
           <section class="group">
             <div class="group-title">Fashionably Late Trade</div>
@@ -61,18 +62,25 @@
                 <option :value="FashionablyLateMode.OnHighLow">On High/Low</option>
                 <option :value="FashionablyLateMode.Atr">ATR</option>
               </select>
-              <span class="tip" tabindex="0" style="margin-left:6px">ⓘ
+              <span class="tip" tabindex="0" style="margin-left: 6px"
+                >ⓘ
                 <span class="tip-content">
-                  Arms a breakout level on the crossover bar and only enters once price breaches it on a later bar
-                  (orders fill next bar open — TV model). “ATR” activates gating only when ATR[1] &gt; threshold.
+                  Arms a breakout level on the crossover bar and only enters once price breaches it
+                  on a later bar (orders fill next bar open — TV model). “ATR” activates gating only
+                  when ATR[1] &gt; threshold.
                 </span>
               </span>
             </div>
             <div class="row">
               <label for="fl_atr">ATR Volatility Threshold</label>
-              <input id="fl_atr" type="number" step="0.1" v-model.number="smaParams.atr_threshold_fl" />
+              <input
+                id="fl_atr"
+                type="number"
+                step="0.1"
+                v-model.number="smaParams.atr_threshold_fl"
+              />
             </div>
-          </section>          
+          </section>
 
           <!-- SL/TP -->
           <section class="group">
@@ -91,31 +99,70 @@
             <div v-if="smaParams.sl_tp_method === SlTpMethod.RiskBased" class="method-rows">
               <div class="row">
                 <label for="sma_rr">Reward/Risk Ratio:</label>
-                <input id="sma_rr" type="number" step="0.1" v-model.number="smaParams.reward_mult_rb">
+                <input
+                  id="sma_rr"
+                  type="number"
+                  step="0.1"
+                  v-model.number="smaParams.reward_mult_rb"
+                />
               </div>
               <div class="row">
                 <label for="sma_atr_mult">R/R ATR Multiplier SL:</label>
-                <input id="sma_atr_mult" type="number" step="0.1" v-model.number="smaParams.atr_mult_rb">
+                <input
+                  id="sma_atr_mult"
+                  type="number"
+                  step="0.1"
+                  v-model.number="smaParams.atr_mult_rb"
+                />
               </div>
             </div>
 
             <!-- Fixed -->
             <div v-if="smaParams.sl_tp_method === SlTpMethod.FixedPercent" class="method-rows">
-              <div class="row"><label>Fixed SL %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc" /></div>
-              <div class="row"><label>Fixed TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_perc" /></div>
+              <div class="row">
+                <label>Fixed SL %:</label
+                ><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc" />
+              </div>
+              <div class="row">
+                <label>Fixed TP %:</label
+                ><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_perc" />
+              </div>
             </div>
 
             <!-- Trailing -->
             <div v-if="smaParams.sl_tp_method === SlTpMethod.TrailingPercent" class="method-rows">
-              <div class="row"><label>Trailing SL %:</label><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc"></div>
-              <div class="row"><label>Static TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
+              <div class="row">
+                <label>Trailing SL %:</label
+                ><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc" />
+              </div>
+              <div class="row">
+                <label>Static TP %:</label
+                ><input
+                  type="number"
+                  step="0.1"
+                  v-model.number="smaParams.fixed_tp_for_trailing_perc"
+                />
+              </div>
             </div>
 
             <!-- Combined -->
             <div v-if="smaParams.sl_tp_method === SlTpMethod.Combined" class="method-rows">
-              <div class="row"><label>Fixed SL %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc"></div>
-              <div class="row"><label>Trailing SL %:</label><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc"></div>
-              <div class="row"><label>Static TP %:</label><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_for_trailing_perc"></div>
+              <div class="row">
+                <label>Fixed SL %:</label
+                ><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc" />
+              </div>
+              <div class="row">
+                <label>Trailing SL %:</label
+                ><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc" />
+              </div>
+              <div class="row">
+                <label>Static TP %:</label
+                ><input
+                  type="number"
+                  step="0.1"
+                  v-model.number="smaParams.fixed_tp_for_trailing_perc"
+                />
+              </div>
             </div>
           </section>
 
@@ -133,14 +180,19 @@
             <div class="row">
               <label for="sma_risk_gearing">Risk Gearing (x):</label>
               <select id="sma_risk_gearing" v-model.number="smaParams.risk_gearing">
-                <option v-for="n in [1,2,3,4,5]" :key="n" :value="n">{{ n }}</option>
+                <option v-for="n in [1, 2, 3, 4, 5]" :key="n" :value="n">{{ n }}</option>
               </select>
             </div>
 
             <!-- Kun for Risk-Based -->
             <div class="row" v-if="isRiskBased">
               <label for="sma_risk_perc">Risk per Trade %:</label>
-              <input id="sma_risk_perc" type="number" step="0.1" v-model.number="smaParams.risk_perc" />
+              <input
+                id="sma_risk_perc"
+                type="number"
+                step="0.1"
+                v-model.number="smaParams.risk_perc"
+              />
             </div>
           </section>
         </fieldset>
@@ -166,43 +218,54 @@
 
             <!-- Round prices to exchange tick -->
             <div class="row row-checkbox">
-              <input id="priceToTick"
-                    type="checkbox"
-                    v-model="priceToTick"
-                    class="accent-blue-500"
-                    :disabled="smaParams.parity_mode" />
-              <label for="priceToTick" class="inline-label">
-                Round prices to exchange tick
-              </label>
+              <input
+                id="priceToTick"
+                type="checkbox"
+                v-model="priceToTick"
+                class="accent-blue-500"
+                :disabled="smaParams.parity_mode"
+              />
+              <label for="priceToTick" class="inline-label"> Round prices to exchange tick </label>
 
               <!-- info-ikon -->
-              <span class="tip" tabindex="0">ⓘ
+              <span class="tip" tabindex="0"
+                >ⓘ
                 <span class="tip-content">
-                  <b>What it does:</b> Rounds all simulated order prices to the exchange's tick size,
-                  always in your disfavor (buy up / sell down).<br>
-                  <b>Use it when:</b> you want exchange-realistic fills.<br>
-                  <b>Turn it OFF</b> to match TradingView Strategy Tester (TV typically doesn't force tick rounding).
+                  <b>What it does:</b> Rounds all simulated order prices to the exchange's tick
+                  size, always in your disfavor (buy up / sell down).<br />
+                  <b>Use it when:</b> you want exchange-realistic fills.<br />
+                  <b>Turn it OFF</b> to match TradingView Strategy Tester (TV typically doesn't
+                  force tick rounding).
                 </span>
               </span>
             </div>
 
             <!-- Match TradingView (Parity) -->
             <div class="row row-checkbox">
-              <input id="parityMode" type="checkbox" v-model="smaParams.parity_mode" class="accent-blue-500" />
+              <input
+                id="parityMode"
+                type="checkbox"
+                v-model="smaParams.parity_mode"
+                class="accent-blue-500"
+              />
               <label for="parityMode" class="inline-label">Match TradingView (Parity)</label>
 
               <!-- info-ikon -->
-              <span class="tip" tabindex="0">ⓘ
+              <span class="tip" tabindex="0"
+                >ⓘ
                 <span class="tip-content">
-                  <b>Match TradingView (Parity)</b><br>
-                  • Når <i>Risk-Based</i> er AV: implicit sizing (prosent/qty/USDT) med gebyrer og trunct qty til exchange step.<br>
-                  • Når <i>Risk-Based</i> er PÅ: qty beregnes eksplisitt av strategien (gebyrer fortsatt inkludert).<br>
-                  <b>Nivåer</b> (SL/TP) kvantiseres til tick; <b>fills</b> rundes ikke (stop har slippage, TP fylles på nivå). Dette endrer ikke close[1]-paritet i sizing.<br>
+                  <b>Match TradingView (Parity)</b><br />
+                  • Når <i>Risk-Based</i> er AV: implicit sizing (prosent/qty/USDT) med gebyrer og
+                  trunct qty til exchange step.<br />
+                  • Når <i>Risk-Based</i> er PÅ: qty beregnes eksplisitt og rundes ned til exchange
+                  step (gebyrer fortsatt inkludert).<br />
+                  <b>Nivåer</b> (SL/TP) kvantiseres til tick; <b>fills</b> rundes ikke (stop har
+                  slippage, TP fylles på nivå). Dette endrer ikke close[1]-paritet i sizing.<br />
                 </span>
               </span>
             </div>
 
-            <!-- NEW: Enable/disable TV preset override (default OFF) 
+            <!-- NEW: Enable/disable TV preset override (default OFF)
             <div class="row row-checkbox">
               <input id="enablePreset" type="checkbox" v-model="presetEnabled" class="accent-blue-500" />
               <label for="enablePreset" class="inline-label">Enable TV preset JSON (override Data Limit)</label>
@@ -212,37 +275,41 @@
                   for å sette <i>Bars LIVE</i> nøyaktig som i TradingView. Når det er AV, ignoreres preset helt.
                 </span>
               </span>
-            </div> -->      
+            </div> -->
           </section>
 
           <section class="group">
             <div class="group-title">Data Source</div>
-            <div class="row"><label for="symbol">Symbol:</label><input id="symbol" v-model="symbol" type="text" /></div>
+            <div class="row">
+              <label for="symbol">Symbol:</label><input id="symbol" v-model="symbol" type="text" />
+            </div>
             <div class="row">
               <label for="timeframe">Timeframe:</label>
               <select id="timeframe" v-model="timeframe">
                 <option v-for="iv in BINANCE_INTERVALS" :key="iv" :value="iv">{{ iv }}</option>
               </select>
             </div>
-          <div class="row">
-            <label for="limit">Data Limit:</label>
-            <input id="limit" v-model.number="dataLimitForFetch" type="number" />
-          </div>
-          <!-- TV preset UI – vises kun når aktivert -->
-          <div class="row" v-if="presetEnabled">
-            <label for="tvpreset">Paste TV preset JSON:</label>
-            <div class="preset-col">
-              <textarea
-                id="tvpreset"
-                rows="2"
-                @paste.prevent="onPastePreset($event)"></textarea>
-              <div class="preset-actions">
-                <button @click="showPreset">Show preset</button>
-                <button @click="clearPreset" style="background:#555">Clear preset</button>
+            <div class="row">
+              <label for="limit">Data Limit:</label>
+              <input id="limit" v-model.number="dataLimitForFetch" type="number" />
+            </div>
+            <div class="row">
+              <label for="end-before">End before (UTC):</label>
+              <input id="end-before" v-model="endBeforeUtc" type="datetime-local" />
+            </div>
+            <p class="hint">Leave empty for latest bars. A fixed end time makes the test repeatable.</p>
+            <!-- TV preset UI – vises kun når aktivert -->
+            <div class="row" v-if="presetEnabled">
+              <label for="tvpreset">Paste TV preset JSON:</label>
+              <div class="preset-col">
+                <textarea id="tvpreset" rows="2" @paste.prevent="onPastePreset($event)"></textarea>
+                <div class="preset-actions">
+                  <button @click="showPreset">Show preset</button>
+                  <button @click="clearPreset" style="background: #555">Clear preset</button>
+                </div>
               </div>
             </div>
-          </div>
-           </section>
+          </section>
 
           <section class="group">
             <div class="group-title">Backtest Properties</div>
@@ -253,29 +320,57 @@
             </div>
             <div class="row" :class="{ 'row-disabled': disableOrderSizeValue }">
               <label for="order-size-value">Order Size:</label>
-              <input id="order-size-value" type="number" v-model.number="smaParams.order_size_value" :disabled="disableOrderSizeValue" />
-              <select v-model="smaParams.order_size_mode" :disabled="isRiskBased" style="margin-left:8px;">
+              <input
+                id="order-size-value"
+                type="number"
+                v-model.number="smaParams.order_size_value"
+                :disabled="disableOrderSizeValue"
+              />
+              <select
+                v-model="smaParams.order_size_mode"
+                :disabled="isRiskBased"
+                style="margin-left: 8px"
+              >
                 <option :value="OrderSizeMode.PercentOfEquity">% of equity</option>
                 <option :value="OrderSizeMode.FixedQuantity">Quantity</option>
                 <option :value="OrderSizeMode.FixedValue">USDT</option>
               </select>
               <!-- lite info-ikon -->
-              <span class="tip" tabindex="0">ⓘ
+              <span class="tip" tabindex="0"
+                >ⓘ
                 <span class="tip-content">
-                  <b>% of equity</b> – implicit TV-sizing fra valgt prosent (default 100%).<br>
-                  <b>Quantity</b> – fast antall enheter.<br>
-                  <b>USDT</b> – fast verdi i quote.<br>
-                  <hr style="border-color:#333; margin:6px 0;">
-                  <b>Risk-Based</b> overstyrer Order Size: qty beregnes eksplisitt fra <i>Risk per Trade %</i> og <i>ATR</i> (gearing anvendes).
+                  <b>% of equity</b> – implicit TV-sizing fra valgt prosent (default 100%).<br />
+                  <b>Quantity</b> – fast antall enheter.<br />
+                  <b>USDT</b> – fast verdi i quote.<br />
+                  <hr style="border-color: #333; margin: 6px 0" />
+                  <b>Risk-Based</b> overstyrer Order Size: qty beregnes eksplisitt fra
+                  <i>Risk per Trade %</i> og <i>ATR</i> (gearing anvendes).
                 </span>
-              </span>              
+              </span>
             </div>
           </section>
 
           <section class="group">
             <div class="group-title">Backtest Costs</div>
-            <div class="row"><label for="commission">Commission (%):</label><input id="commission" type="number" step="0.01" v-model.number="commissionPercent" style="width:60px" /></div>
-            <div class="row"><label for="slippage">Slippage (ticks):</label><input id="slippage" type="number" v-model.number="slippageTicks" style="width:60px" /></div>
+            <div class="row">
+              <label for="commission">Commission (%):</label
+              ><input
+                id="commission"
+                type="number"
+                step="0.01"
+                v-model.number="commissionPercent"
+                style="width: 60px"
+              />
+            </div>
+            <div class="row">
+              <label for="slippage">Slippage (ticks):</label
+              ><input
+                id="slippage"
+                type="number"
+                v-model.number="slippageTicks"
+                style="width: 60px"
+              />
+            </div>
           </section>
         </fieldset>
       </div>
@@ -283,7 +378,7 @@
       <button class="run-btn" @click="runBacktest" :disabled="isLoading">
         {{ isLoading ? 'Running Backtest...' : 'Run Backtest' }}
       </button>
-      <!-- 
+      <!--
       <button @click="runDebug" style="background-color: #55aaff; margin-top: 10px;">
           Run Stepped VWAP Debug
       </button>
@@ -291,59 +386,60 @@
     </div>
 
     <div class="results-panel" v-if="results">
-    <h3 class="section-title">Backtest Results</h3>
+      <h3 class="section-title">Backtest Results</h3>
 
-    <!-- Metrics + Chart merged into a single visual card -->
-    <div class="results-stack">
-      <div class="summary-metrics">
-        <div>
-          <strong>Total P&L:</strong><br />
-          <span :class="formattedTotalPnl.class">{{ formattedTotalPnl.text }}</span>
+      <!-- Metrics + Chart merged into a single visual card -->
+      <div class="results-stack">
+        <div class="summary-metrics">
+          <div>
+            <strong>Total P&L:</strong><br />
+            <span :class="formattedTotalPnl.class">{{ formattedTotalPnl.text }}</span>
+          </div>
+          <div>
+            <strong>Max equity drawdown:</strong><br />
+            {{ results.summary.max_drawdown_amount.toFixed(2) }} USDT ({{
+              results.summary.max_drawdown_percent.toFixed(2)
+            }}
+            %)
+          </div>
+          <div><strong>Total Trades:</strong><br />{{ results.summary.total_trades }}</div>
+          <div>
+            <strong>Profitable trades:</strong><br />{{
+              results.summary.total_trades
+                ? (
+                    (results.summary.profitable_trades / results.summary.total_trades) *
+                    100
+                  ).toFixed(2)
+                : '0.00'
+            }}% ({{ results.summary.profitable_trades }})
+          </div>
+          <div>
+            <strong>Profit factor:</strong><br />{{ results.summary.profit_factor.toFixed(3) }}
+          </div>
         </div>
-        <div>
-          <strong>Max equity drawdown:</strong><br />
-          {{ results.summary.max_drawdown_amount.toFixed(2) }} USDT
-          ({{ results.summary.max_drawdown_percent.toFixed(2) }} %)
+
+        <div class="chart-card" v-if="results?.equity_curve?.length">
+          <PnlChart
+            :equity-curve="results.equity_curve"
+            :initial-capital="initialCapital"
+            :trade-log="results.trade_log"
+            :range-start-ms="tvStartMs"
+            :range-end-ms="tvEndMs"
+            baseline-mode="firstNonFlat"
+          />
         </div>
-        <div>
-          <strong>Total Trades:</strong><br />{{ results.summary.total_trades }}
-        </div>
-        <div>
-          <strong>Profitable trades:</strong><br />{{
-            results.summary.total_trades
-              ? (results.summary.profitable_trades / results.summary.total_trades * 100).toFixed(2)
-              : '0.00'
-          }}% ({{ results.summary.profitable_trades }})
-        </div>
-        <div>
-          <strong>Profit factor:</strong><br />{{ results.summary.profit_factor.toFixed(3) }}
-        </div>
+
+        <div v-else class="empty-chart-placeholder">No performance data to display.</div>
       </div>
 
-      <div class="chart-card" v-if="results?.equity_curve?.length">
-        <PnlChart
-          :equity-curve="results.equity_curve"
-          :initial-capital="initialCapital"
-          :trade-log="results.trade_log"
-          :range-start-ms="tvStartMs"
-          :range-end-ms="tvEndMs"
-          baseline-mode="firstNonFlat"
-        />
-      </div>
-
-      <div v-else class="empty-chart-placeholder">
-        No performance data to display.
-      </div>
-    </div>
-
-    <h3 class="section-title">List of Trades</h3>
+      <h3 class="section-title">List of Trades</h3>
 
       <table v-if="processedTradeLog.length > 0">
         <thead>
           <tr>
             <th>Trade #</th>
             <th>Type</th>
-            <th>Date/Time</th>            
+            <th>Date/Time</th>
             <th>Signal</th>
             <th>Price</th>
             <th style="text-align: center">Position size</th>
@@ -355,7 +451,6 @@
         </thead>
         <tbody>
           <template v-for="trade in processedTradeLog" :key="trade.entry.trade_id">
-            
             <!-- Viser lukkede handler -->
             <template v-if="trade.exit">
               <!-- Rad for Exit -->
@@ -370,49 +465,69 @@
                   </span>
                 </td>
                 <td>Exit</td>
-                <td>{{ new Date(trade.exit.timestamp).toLocaleString() }}</td>                       
-                <td>{{ signalLabel(trade.exit) }}</td>                         
+                <td>{{ formatDateTime(trade.exit.timestamp) }}</td>
+                <td>{{ signalLabel(trade.exit) }}</td>
                 <td>{{ trade.exit.price.toFixed(2) }} {{ quoteCurrency }}</td>
-                <td :rowspan="2" style="text-align:center">
-                  <div>{{ trade.exit.quantity.toFixed(2) }}</div>
-                  <div class="percent-value">{{ (trade.positionValue/1000).toFixed(2) }}k&nbsp;{{ quoteCurrency }}</div>
+                <td :rowspan="2" style="text-align: center">
+                  <div>{{ trade.exit.quantity.toFixed(qtyDecimals) }}</div>
+                  <div class="percent-value">
+                    {{ trade.positionValue.toFixed(5) }}&nbsp;{{ quoteCurrency }}
+                  </div>
                 </td>
 
                 <!-- Net P&L med % -->
-                <td :rowspan="2" :class="{ profit: trade.exit.pnl! > 0, loss: trade.exit.pnl! < 0 }">
-                  <div>{{ trade.exit.pnl?.toFixed(3) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value" :class="{ profit: (trade.pnlPercent ?? 0) > 0, loss: (trade.pnlPercent ?? 0) < 0 }">
+                <td
+                  :rowspan="2"
+                  :class="{ profit: trade.exit.pnl! > 0, loss: trade.exit.pnl! < 0 }"
+                >
+                  <div>{{ trade.exit.pnl?.toFixed(2) }} {{ quoteCurrency }}</div>
+                  <div
+                    class="percent-value"
+                    :class="{
+                      profit: (trade.pnlPercent ?? 0) > 0,
+                      loss: (trade.pnlPercent ?? 0) < 0,
+                    }"
+                  >
                     {{ tvFmt2(trade.pnlPercent) }}%
                   </div>
-                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->           
+                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->
                 </td>
 
                 <!-- Run-up med % -->
                 <td :rowspan="2">
-                   <div>{{ trade.exit.run_up_amount?.toFixed(3) }} {{ quoteCurrency }}</div>
-                   <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
-                   <!-- <div class="percent-value percent-small">{{ trade.runUpPercent4?.toFixed(4) }}%</div> -->
+                  <div>{{ trade.exit.run_up_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
+                  <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
+                  <!-- <div class="percent-value percent-small">{{ trade.runUpPercent4?.toFixed(4) }}%</div> -->
                 </td>
 
                 <!-- Drawdown med % -->
                 <td :rowspan="2">
-                   <div>-{{ trade.exit.drawdown_amount?.toFixed(3) }} {{ quoteCurrency }}</div>
-                   <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
-                   <!-- <div class="percent-value percent-small">-{{ trade.drawdownPercent4?.toFixed(4) }}%</div> -->
+                  <div>-{{ trade.exit.drawdown_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
+                  <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
+                  <!-- <div class="percent-value percent-small">-{{ trade.drawdownPercent4?.toFixed(4) }}%</div> -->
                 </td>
-                
+
                 <!-- Cumulative P&L -->
-                <td :rowspan="2" :class="{ profit: trade.cumulativePnl!> 0, loss: trade.cumulativePnl! < 0 }">
-                   <div>{{ trade.cumulativePnl?.toFixed(3) }} {{ quoteCurrency }}</div>
-                   <div class="percent-value" :class="{ profit: (trade.cumulativePnlPercent ?? 0) > 0, loss: (trade.cumulativePnlPercent ?? 0) < 0 }">
-                      {{ trade.cumulativePnlPercent?.toFixed(2) }}%
-                   </div>
+                <td
+                  :rowspan="2"
+                  :class="{ profit: trade.cumulativePnl! > 0, loss: trade.cumulativePnl! < 0 }"
+                >
+                  <div>{{ trade.cumulativePnl?.toFixed(2) }} {{ quoteCurrency }}</div>
+                  <div
+                    class="percent-value"
+                    :class="{
+                      profit: (trade.cumulativePnlPercent ?? 0) > 0,
+                      loss: (trade.cumulativePnlPercent ?? 0) < 0,
+                    }"
+                  >
+                    {{ trade.cumulativePnlPercent?.toFixed(2) }}%
+                  </div>
                 </td>
               </tr>
               <!-- Rad for Entry -->
               <tr>
                 <td>Entry</td>
-                <td>{{ new Date(trade.entry.timestamp).toLocaleString() }}</td>                
+                <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
                 <td>{{ signalLabel(trade.entry) }}</td>
                 <td>{{ trade.entry.price.toFixed(2) }} {{ quoteCurrency }}</td>
               </tr>
@@ -431,45 +546,67 @@
                   </span>
                 </td>
                 <td>Exit {{ trade.entry.direction }}</td>
-                <td>{{ new Date(openNowTs ?? trade.entry.timestamp).toLocaleString() }}</td>
+                <td>{{ formatDateTime(openNowTs ?? trade.entry.timestamp) }}</td>
                 <td>Open</td>
                 <td>
                   <!-- bruk simulert "nå"-pris fra bar_log-markør, ellers "—" -->
-                  <template v-if="openNowPrice !== undefined">{{ openNowPrice!.toFixed(2) }} {{ quoteCurrency }}</template>
+                  <template v-if="openNowPrice !== undefined"
+                    >{{ openNowPrice!.toFixed(2) }} {{ quoteCurrency }}</template
+                  >
                   <template v-else>—</template>
                 </td>
 
                 <!-- Quantity/pos-verdi over to rader -->
-                <td :rowspan="2" style="text-align:center">
-                  <div>{{ trade.entry.quantity.toFixed(2) }}</div>
-                  <div class="percent-value">{{ (trade.positionValue/1000).toFixed(2) }}k&nbsp;{{ quoteCurrency }}</div>
+                <td :rowspan="2" style="text-align: center">
+                  <div>{{ trade.entry.quantity.toFixed(qtyDecimals) }}</div>
+                  <div class="percent-value">
+                    {{ trade.positionValue.toFixed(5) }}&nbsp;{{ quoteCurrency }}
+                  </div>
                 </td>
 
                 <!-- P&L (åpen) over to rader, som i TV -->
-                <td :rowspan="2" :class="{ profit: (trade.entry.pnl ?? 0) > 0, loss: (trade.entry.pnl ?? 0) < 0 }">
-                  <div>{{ trade.entry.pnl?.toFixed(3) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value" :class="{ profit: (trade.pnlPercent ?? 0) > 0, loss: (trade.pnlPercent ?? 0) < 0 }">
+                <td
+                  :rowspan="2"
+                  :class="{ profit: (trade.entry.pnl ?? 0) > 0, loss: (trade.entry.pnl ?? 0) < 0 }"
+                >
+                  <div>{{ trade.entry.pnl?.toFixed(2) }} {{ quoteCurrency }}</div>
+                  <div
+                    class="percent-value"
+                    :class="{
+                      profit: (trade.pnlPercent ?? 0) > 0,
+                      loss: (trade.pnlPercent ?? 0) < 0,
+                    }"
+                  >
                     {{ trade.pnlPercent?.toFixed(2) }}%
                   </div>
-                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->                 
+                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->
                 </td>
 
                 <!-- Run-up (over to rader) -->
                 <td :rowspan="2">
-                  <div>{{ trade.entry.run_up_amount?.toFixed(3) }} {{ quoteCurrency }}</div>
+                  <div>{{ trade.entry.run_up_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
                   <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
                 </td>
 
                 <!-- Drawdown (over to rader) -->
                 <td :rowspan="2">
-                  <div>-{{ trade.entry.drawdown_amount?.toFixed(3) }} {{ quoteCurrency }}</div>
+                  <div>-{{ trade.entry.drawdown_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
                   <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
                 </td>
 
                 <!-- Cumulative P&L (over to rader) -->
-                <td :rowspan="2" :class="{ profit: trade.cumulativePnl!> 0, loss: trade.cumulativePnl! < 0 }">
-                  <div>{{ trade.cumulativePnl?.toFixed(3) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value" :class="{ profit: (trade.cumulativePnlPercent ?? 0) > 0, loss: (trade.cumulativePnlPercent ?? 0) < 0 }">
+                <td
+                  :rowspan="2"
+                  :class="{ profit: trade.cumulativePnl! > 0, loss: trade.cumulativePnl! < 0 }"
+                >
+                  <div>{{ trade.cumulativePnl?.toFixed(2) }} {{ quoteCurrency }}</div>
+                  <div
+                    class="percent-value"
+                    :class="{
+                      profit: (trade.cumulativePnlPercent ?? 0) > 0,
+                      loss: (trade.cumulativePnlPercent ?? 0) < 0,
+                    }"
+                  >
                     {{ trade.cumulativePnlPercent?.toFixed(2) }}%
                   </div>
                 </td>
@@ -478,7 +615,7 @@
               <!-- UNDER: Entry-raden for samme trade -->
               <tr>
                 <td>Entry {{ trade.entry.direction }}</td>
-                <td>{{ new Date(trade.entry.timestamp).toLocaleString() }}</td>
+                <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
                 <td>{{ signalLabel(trade.entry) }}</td>
                 <td>{{ trade.entry.price.toFixed(2) }} {{ quoteCurrency }}</td>
               </tr>
@@ -486,117 +623,117 @@
           </template>
         </tbody>
       </table>
-      
+
       <p v-else-if="results">No trades were executed.</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted } from 'vue';
-import { useBacktest } from '@/composables/useBacktest';
-import { fetchSymbolFilters } from '@/services/binanceAPI';
-import PnlChart from '@/components/PnlChart.vue';
-import { loadPreset, savePreset, parsePreset, type TvPreset } from '@/services/tvPreset.ts';
+import { ref, computed, reactive } from 'vue'
+import { useBacktest } from '@/composables/useBacktest'
+import { fetchSymbolFilters } from '@/services/binanceAPI'
+import PnlChart from '@/components/PnlChart.vue'
+import { loadPreset, savePreset, parsePreset, type TvPreset } from '@/services/tvPreset.ts'
 
 // Importer ENUMs (verdier)
-import { 
-  EmaSource, 
-  VwapAnchorPeriod, 
-  TradeDirectionFilter, 
-  FashionablyLateMode, 
-  SlTpMethod, 
-  OrderSizeMode 
-} from '@/types/common_strategy_types';
+import {
+  EmaSource,
+  VwapAnchorPeriod,
+  TradeDirectionFilter,
+  FashionablyLateMode,
+  SlTpMethod,
+  OrderSizeMode,
+} from '@/types/common_strategy_types'
 
 // Importer INTERFACES (typer)
-import type { 
-  BacktestResult, 
-  BacktestConfig, 
-  TradeEvent, 
+import type {
+  BacktestResult,
+  BacktestConfig,
+  TradeEvent,
   ProcessedTrade,
-  EmaVwapParams, 
-  SmaParams
-} from '@/types/common_strategy_types';
+  EmaVwapParams,
+  SmaParams,
+} from '@/types/common_strategy_types'
 
 /* ------------------------------------------------------------------
    1.  HJELPE-FUNKSJONER FOR AVRUNDING OG SIGNAL TEKST
 --------------------------------------------------------------------*/
 // TV preset (lagret i localStorage) + bryter for å bruke/ignore det
-const tvPreset = ref<TvPreset | null>(loadPreset()); // last fra localStorage på oppstart
-const presetEnabled = ref(false);                    // default: AV
+const tvPreset = ref<TvPreset | null>(loadPreset()) // last fra localStorage på oppstart
+const presetEnabled = ref(false) // default: AV
 
 // Rounding: half-away-from-zero (TV-konsistent)
 const roundN = (x: number, n: number) => {
-  const m = Math.pow(10, n);
-  return (x >= 0 ? Math.round(x * m) : -Math.round(-x * m)) / m;
-};
-const priceDecimals = ref(2);
-const qtyDecimals   = ref(2);
+  const m = Math.pow(10, n)
+  return (x >= 0 ? Math.round(x * m) : -Math.round(-x * m)) / m
+}
+const priceDecimals = ref(2)
+const qtyDecimals = ref(2)
 
-// Binance endrer nettopp fra 2 til 3 desimaler 
-const cent  = (x: number) => roundN(x, 3);   // 3 desimaler (beløp – "valuta")
+// Keep full precision in calculations; round currency at display time.
+const cent = (x: number) => roundN(x, 2) // Currency is rounded only for display.
 // Hjelpere for 2/4 desimalers avrunding (TV-stil)
-const r2 = (x:number) => roundN(x, 2);
-const r4 = (x:number) => roundN(x, 4);
+const r2 = (x: number) => roundN(x, 2)
+const r4 = (x: number) => roundN(x, 4)
 
 // TV-basis for prosent: entry pris rundet til tick  ×  qty trunket til step
-const tvBasisRaw = (entryPrice:number, entryQty:number) => {
-  const p = roundN(entryPrice, priceDecimals.value);
-  const q = truncN(entryQty,   qtyDecimals.value);
-  return p * q;                 // rå basis (ikke r2)
-};
-const tvBasisDisp = (entryPrice:number, entryQty:number) => r2(tvBasisRaw(entryPrice, entryQty));
+const tvBasisRaw = (entryPrice: number, entryQty: number) => {
+  const p = roundN(entryPrice, priceDecimals.value)
+  const q = truncN(entryQty, qtyDecimals.value)
+  return p * q // rå basis (ikke r2)
+}
+const tvBasisDisp = (entryPrice: number, entryQty: number) => r2(tvBasisRaw(entryPrice, entryQty))
 
 // const milli = (x: number) => roundN(x, 3);   // 3 desimaler (qty)
-const pct2  = (x: number) => roundN(x, 2);   // 2 desimaler (prosent, brukes f.eks. på cumulative)
+const pct2 = (x: number) => roundN(x, 2) // 2 desimaler (prosent, brukes f.eks. på cumulative)
 // Trunkering (mot 0) til n desimaler – matcher TV når qty har step 0.01
 const truncN = (x: number, n: number) =>
-  (x >= 0 ? Math.trunc(x * 10 ** n) : Math.ceil(x * 10 ** n)) / 10 ** n;
+  (x >= 0 ? Math.trunc(x * 10 ** n) : Math.ceil(x * 10 ** n)) / 10 ** n
 
 // Prosenter vises allerede med riktig avrunding (half-away) → kun "safe to string".
 const tvFmt2 = (x?: number) => {
-  if (x === undefined || x === null || !isFinite(x)) return '0.00';
-  const safe = Math.abs(x) < 0.005 ? 0 : x; // unngå "-0.00"
-  return roundN(safe, 2).toFixed(2);
-};
+  if (x === undefined || x === null || !isFinite(x)) return '0.00'
+  const safe = Math.abs(x) < 0.005 ? 0 : x // unngå "-0.00"
+  return roundN(safe, 2).toFixed(2)
+}
 
 // Prosent slik TV kalkulerer:
 //  • 4dp:  amount / tvBasisRaw * 100  → r4
 //  • 2dp: (r2(amount) / tvBasisDisp) * 100  → r2
-const tvPercent4dp = (amount:number, entryPrice:number, entryQty:number) => {
-  const base = tvBasisRaw(entryPrice, entryQty);
-  return base ? r4((amount / base) * 100) : 0;
-};
-const tvPercent2dp = (amount:number, entryPrice:number, entryQty:number) => {
-  const base = tvBasisDisp(entryPrice, entryQty);
-  return base ? r2((r2(amount) / base) * 100) : 0;
-};
+const tvPercent4dp = (amount: number, entryPrice: number, entryQty: number) => {
+  const base = tvBasisRaw(entryPrice, entryQty)
+  return base ? r4((amount / base) * 100) : 0
+}
+const tvPercent2dp = (amount: number, entryPrice: number, entryQty: number) => {
+  const base = tvBasisDisp(entryPrice, entryQty)
+  return base ? r2((r2(amount) / base) * 100) : 0
+}
 
 // Normaliser SignalType fra Rust til en enkel nøkkel
 function normSignal(ev: TradeEvent | undefined): string {
-  if (!ev) return '';
+  if (!ev) return ''
   return String(ev.signal ?? '')
-    .replace(/^(Buy|Sell)\s*/i, '')     // fjern "Buy"/"Sell" prefiks fra ev.signal
+    .replace(/^(Buy|Sell)\s*/i, '') // fjern "Buy"/"Sell" prefiks fra ev.signal
     .replace(/[_\s-]/g, '')
-    .toLowerCase();
+    .toLowerCase()
 }
 
 // Side-tekst iht. TV-reglene (se over)
 function orderSide(ev: TradeEvent): 'Buy' | 'Sell' {
-  const isLong = ev.direction === 'long';
-  const isReversal = ev.event_type === 'Exit' && normSignal(ev) === 'reversal';
+  const isLong = ev.direction === 'long'
+  const isReversal = ev.event_type === 'Exit' && normSignal(ev) === 'reversal'
   // Vanlig: følg posisjonsretningen; Reversal: inverter
-  const base = isLong ? 'Buy' : 'Sell';
-  return isReversal ? (isLong ? 'Sell' : 'Buy') : base;
+  const base = isLong ? 'Buy' : 'Sell'
+  return isReversal ? (isLong ? 'Sell' : 'Buy') : base
 }
 
 // Bruk orderSide + fin tittel
 function signalLabel(ev: TradeEvent): string {
-  const side = orderSide(ev);
-  const key = normSignal(ev);
+  const side = orderSide(ev)
+  const key = normSignal(ev)
 
-  const TITLE: Record<string,string> = {
+  const TITLE: Record<string, string> = {
     // Entry
     std: 'Std',
     flclose: 'FL Close',
@@ -611,24 +748,44 @@ function signalLabel(ev: TradeEvent): string {
     // Entry/Exit
     reversal: 'Reversal',
     closeopposite: 'Close Opposite',
-  };
+  }
 
-  const reason = TITLE[key] ?? '';
-  return reason ? `${side} ${reason}` : side;
+  const reason = TITLE[key] ?? ''
+  return reason ? `${side} ${reason}` : side
 }
 
 function onPastePreset(e: ClipboardEvent) {
-  const txt = e.clipboardData?.getData('text') ?? '';
+  const txt = e.clipboardData?.getData('text') ?? ''
   try {
-    const parsed = parsePreset(txt);
-    tvPreset.value = parsed;
-    savePreset(parsed);
+    const parsed = parsePreset(txt)
+    tvPreset.value = parsed
+    savePreset(parsed)
     // auto-enable når bruker limer inn noe gyldig
-    if (!presetEnabled.value) presetEnabled.value = true;
-    alert('Preset applied ✔');
-  } catch (err:any) {
-    alert('Invalid preset JSON\n' + (err?.message ?? ''));
+    if (!presetEnabled.value) presetEnabled.value = true
+    alert('Preset applied ✔')
+  } catch (err: unknown) {
+    alert('Invalid preset JSON\n' + ((err as Error)?.message ?? ''))
   }
+}
+
+// TradingView-stil dato/tid:
+//  - Rust gir timestamps i ms siden epoch (UTC)
+//  - vi viser dem i samme timezone som TradingView-chartet (Europe/Oslo)
+const tvDateFormatter = new Intl.DateTimeFormat('nb-NO', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+  timeZone: 'Europe/Oslo', // endre hvis du bruker annen chart-timezone
+})
+
+const formatDateTime = (ts: number | null | undefined): string => {
+  if (ts == null || !Number.isFinite(ts)) return '-'
+  // ts er ms-timestamp i UTC fra Rust – formater i valgt timezone
+  return tvDateFormatter.format(new Date(ts))
 }
 
 /* ------------------------------------------------------------------
@@ -661,31 +818,44 @@ const emaVwapParams = reactive<EmaVwapParams>({
   dmi_length: 6,
   dmi_smoothing: 24,
   dmi_threshold: 14.05,
-});
+})
 
 // Bruk useBacktest composable
-const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaVwapBacktest } = useBacktest();
+const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaVwapBacktest } =
+  useBacktest()
 
 // --- Input variabler ---
-const symbol = ref('SOLUSDT');
+const symbol = ref('SOLUSDT')
 // Gyldige Binance-klines intervaller (spot /api/v3/klines)
 const BINANCE_INTERVALS = [
   '1s',
-  '1m','3m','5m','15m','30m',
-  '1h','2h','4h','6h','8h','12h',
-  '1d','3d','1w','1M'
-] as const;
-const timeframe = ref<typeof BINANCE_INTERVALS[number]>('1h');
-const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini');
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '2h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '3d',
+  '1w',
+  '1M',
+] as const
+const timeframe = ref<(typeof BINANCE_INTERVALS)[number]>('1h')
+const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini')
 
 // `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
-const smaParams = reactive<SmaParams>({ 
-  fast_period: 50,  // 10
-  slow_period: 300,  // 64, 73
+const smaParams = reactive<SmaParams>({
+  fast_period: 10,
+  slow_period: 73,
   order_size_mode: OrderSizeMode.PercentOfEquity,
-  order_size_value: 100, // 100% av equity  
+  order_size_value: 100, // 100% av equity
   // order_size_mode: OrderSizeMode.ExplicitQty,
-  // order_size_value: 1.0, // gearing 1x (2.0 for 2×, osv.)  
+  // order_size_value: 1.0, // gearing 1x (2.0 for 2×, osv.)
   sl_tp_method: SlTpMethod.TrailingPercent,
   fixed_sl_perc: 1.0,
   fixed_tp_perc: 2.0,
@@ -693,167 +863,174 @@ const smaParams = reactive<SmaParams>({
   fixed_tp_for_trailing_perc: 5.0,
   // full-strategi felt …
   atr_length: 14,
-  reward_mult_rb: 1.4,
-  atr_mult_rb: 1.8,
+  reward_mult_rb: 2.0,
+  atr_mult_rb: 1.5,
   risk_gearing: 1,
-  risk_perc: 1.2,
-  
-  trade_direction: TradeDirectionFilter.Both,
-  parity_mode: true,   // default ON to mirror TradingView  
+  risk_perc: 1.0,
 
-  fashionably_late_mode: FashionablyLateMode.Off,
-  atr_threshold_fl: 1.3,  
-});
+  trade_direction: TradeDirectionFilter.Both,
+  parity_mode: true, // default ON to mirror TradingView
+
+  fashionably_late_mode: FashionablyLateMode.Atr,
+  atr_threshold_fl: 1.3,
+})
 
 // Aktiv RB? (gjelder nå for både Full og Mini)
-const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBased);
+const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBased)
 
 // Order Size-verdi er inaktiv når Risk-Based styrer sizing
-const disableOrderSizeValue = computed(() => isRiskBased.value);
+const disableOrderSizeValue = computed(() => isRiskBased.value)
 
-const priceToTick = ref(false) 
-const commissionPercent = ref(0.05);
-const slippageTicks = ref(2);
+const priceToTick = ref(false)
+const commissionPercent = ref(0.05)
+const slippageTicks = ref(2)
 
 // --- Resultat variabler ---
-const initialCapital = ref(10000); 
-const results = ref<BacktestResult | null>(null);
-const quoteCurrency = ref('USDT');
+const initialCapital = ref(10000)
+const results = ref<BacktestResult | null>(null)
+const quoteCurrency = ref('USDT')
 
 // Slutt = siste bar i equity-curve (når resultater finnes)
 const tvEndMs = computed(() =>
-  results.value?.equity_curve?.length
-    ? results.value.equity_curve.at(-1)!.timestamp
-    : undefined
-);
+  results.value?.equity_curve?.length ? results.value.equity_curve.at(-1)!.timestamp : undefined,
+)
 
 // Start = første bar i equity-curve (brukes av PnlChart for range-start)
 const tvStartMs = computed(() =>
-  results.value?.equity_curve?.length
-    ? results.value.equity_curve[0]!.timestamp
-    : undefined
-);
+  results.value?.equity_curve?.length ? results.value.equity_curve[0]!.timestamp : undefined,
+)
 
 // SIMULERT "nå"-markør (pushes fra Rust når posisjon er åpen):
 // Vi leser siste bar_log-rad (sig == "OpenNow") for tid og pris.
-const openNowTs = computed<number | undefined>(() => results.value?.bar_log?.at(-1)?.timestamp);
-const openNowPrice = computed<number | undefined>(() => results.value?.bar_log?.at(-1)?.close);
+const openNowTs = computed<number | undefined>(() => results.value?.bar_log?.at(-1)?.timestamp)
+const openNowPrice = computed<number | undefined>(() => results.value?.bar_log?.at(-1)?.close)
 
-console.log('params.sma:', JSON.stringify(smaParams));
+console.log('params.sma:', JSON.stringify(smaParams))
 
 // Manuelt Data Limit (ingen auto-beregning)
-const dataLimitForFetch = ref<number>(10000);
+const dataLimitForFetch = ref<number>(10000)
+const endBeforeUtc = ref('')
 
 function showPreset() {
   if (!tvPreset.value) {
-    alert('No preset stored.');
+    alert('No preset stored.')
   } else {
-    alert(JSON.stringify(tvPreset.value, null, 2));
+    alert(JSON.stringify(tvPreset.value, null, 2))
   }
 }
 function clearPreset() {
-  tvPreset.value = null;
-  savePreset(null);        // tvPreset.ts bør støtte null → removeItem
-  alert('Preset cleared ✔');
+  tvPreset.value = null
+  savePreset(null) // tvPreset.ts bør støtte null → removeItem
+  alert('Preset cleared ✔')
 }
 
 /* ------------------------------------------------------------------
    3.  KJØR BACKTEST (uendret)
 --------------------------------------------------------------------*/
 const runBacktest = async () => {
-  results.value = null; // Nullstill gamle resultater
-  isLoading.value = true;
+  results.value = null // Nullstill gamle resultater
+  isLoading.value = true
 
   // Bestem quoteCurrency basert på symbol
-  if (symbol.value.endsWith('USDT')) quoteCurrency.value = 'USDT';
-  else if (symbol.value.endsWith('USD')) quoteCurrency.value = 'USD';
-  else if (symbol.value.endsWith('EUR')) quoteCurrency.value = 'EUR';
-  else if (symbol.value.endsWith('BTC')) quoteCurrency.value = 'BTC';
-  else quoteCurrency.value = 'UNKNOWN'; // Fallback hvis ingen match
+  if (symbol.value.endsWith('USDT')) quoteCurrency.value = 'USDT'
+  else if (symbol.value.endsWith('USD')) quoteCurrency.value = 'USD'
+  else if (symbol.value.endsWith('EUR')) quoteCurrency.value = 'EUR'
+  else if (symbol.value.endsWith('BTC')) quoteCurrency.value = 'BTC'
+  else quoteCurrency.value = 'UNKNOWN' // Fallback hvis ingen match
 
   try {
+    const endTimeExclusive = endBeforeUtc.value
+      ? Date.parse(`${endBeforeUtc.value}Z`)
+      : undefined
+    if (endTimeExclusive !== undefined && !Number.isFinite(endTimeExclusive)) {
+      throw new Error('Invalid backtest end time.')
+    }
     // Dynamisk tick size hentes fra API
-    const filters = await fetchSymbolFilters(symbol.value);
+    const filters = await fetchSymbolFilters(symbol.value)
     // hent antall desimaler fra tick/step (robust for 0.1, 0.01, 0.0001, osv.)
     const decimalsFromStep = (x: number | string) => {
-      const s = String(x);
+      const s = String(x)
       if (s.includes('e-')) {
-        const m = /e-(\d+)/i.exec(s);
-        return m ? parseInt(m[1], 10) : 0;
+        const m = /e-(\d+)/i.exec(s)
+        return m ? parseInt(m[1], 10) : 0
       }
-      const i = s.indexOf('.');
-      return i === -1 ? 0 : s.length - i - 1;
-    };
-    priceDecimals.value = decimalsFromStep(filters.tickSize);
-    qtyDecimals.value   = decimalsFromStep(filters.stepSize);    
+      const i = s.indexOf('.')
+      return i === -1 ? 0 : s.length - i - 1
+    }
+    priceDecimals.value = decimalsFromStep(filters.tickSize)
+    qtyDecimals.value = decimalsFromStep(filters.stepSize)
     const backtestConfig: BacktestConfig = {
       commission_percent: commissionPercent.value,
       slippage_ticks: slippageTicks.value,
       tick_size: filters.tickSize, // 0.01 hos Binance for de fleste USDT-par
       step_size: filters.stepSize, // 0.001 hos Binance - Husk å legge til step_size i BacktestConfig-typen din også
-    }; 
+    }
     // Kall riktig Rust-funksjon basert på valgt strategi
     if (selectedStrategy.value === 'smaCross') {
       results.value = await runSmaCrossoverBacktest({
         symbol: symbol.value,
         interval: timeframe.value,
         limit: dataLimitForFetch.value,
+        endTimeExclusive,
         initialCapital: initialCapital.value,
         config: backtestConfig,
         params: smaParams,
-      });
+      })
     } else if (selectedStrategy.value === 'smaCrossMini') {
       results.value = await runSmaCrossoverMiniBacktest({
         symbol: symbol.value,
         interval: timeframe.value,
         limit: dataLimitForFetch.value,
+        endTimeExclusive,
         initialCapital: initialCapital.value,
         config: backtestConfig,
         params: smaParams,
         priceToTick: priceToTick.value,
-      });      
+      })
     } else if (selectedStrategy.value === 'emaVwap') {
       // VIKTIG: Denne er nå helt lik SMA-kallet, men sender 'params'
       results.value = await runEmaVwapBacktest({
         symbol: symbol.value,
         interval: timeframe.value,
         limit: dataLimitForFetch.value,
+        endTimeExclusive,
         initialCapital: initialCapital.value,
         config: backtestConfig,
         params: emaVwapParams, // Send hele det reaktive objektet
-      });   
+      })
     }
   } catch (error) {
-    console.error('Failed to run backtest:', error);
-    alert('An error occurred. Check the console for details.');
+    console.error('Failed to run backtest:', error)
+    alert('An error occurred. Check the console for details.')
   } finally {
-    isLoading.value = false;
+    isLoading.value = false
   }
-};
+}
 
 /* ------------------------------------------------------------------
    4.  KEY METRIC ØVERST (uendret)
 --------------------------------------------------------------------*/
 const formattedTotalPnl = computed(() => {
-  if (!results.value) return { text: '0.00 USDT', class: '' };
+  if (!results.value) return { text: '0.00 USDT', class: '' }
 
-  const { net_profit, pnl_open, pnl_total } = results.value.summary;
+  const { net_profit, pnl_open, pnl_total } = results.value.summary
 
   // 1) Prosent for Net profit
-  const netPerc  = (net_profit / initialCapital.value) * 100;
+  const netPerc = (net_profit / initialCapital.value) * 100
 
   // 2) Prosent for Open P&L (bruk kontantsaldo etter lukkede handler)
-  const baseForOpen = initialCapital.value + net_profit;
-  const openPerc = baseForOpen !== 0 ? (pnl_open / baseForOpen) * 100 : 0;
-  const totalPerc = netPerc + openPerc;
-  const sign = pnl_total >= 0 ? '+' : '';
-  const cls  = pnl_total > 0 ? 'profit' : 'loss';
+  const baseForOpen = initialCapital.value + net_profit
+  const openPerc = baseForOpen !== 0 ? (pnl_open / baseForOpen) * 100 : 0
+  const totalPerc = netPerc + openPerc
+  const sign = pnl_total >= 0 ? '+' : ''
+  const cls = pnl_total > 0 ? 'profit' : 'loss'
   return {
-    text : `${sign}${pnl_total.toFixed(2)} ${quoteCurrency.value} `
-         + `(${sign}${totalPerc.toFixed(2)}%)`,
+    text:
+      `${sign}${pnl_total.toFixed(2)} ${quoteCurrency.value} ` +
+      `(${sign}${totalPerc.toFixed(2)}%)`,
     class: cls,
-  };
-});
+  }
+})
 
 /* ------------------------------------------------------------------
    5.  LIST OF TRADES –  NÅ MED «TV-NØYAKTIG» PROSENT
@@ -864,112 +1041,119 @@ const formattedTotalPnl = computed(() => {
 // (nå definert som tvPercent4dp / tvPercent2dp over)
 
 // Enkel debug-toggle for prosentberegninger
-const PCT_DEBUG = false;                 // sett true ved feilsøking
-const PCT_DEBUG_IDS = new Set<number>(); // legg inn trade-id'er hvis du vil filtrere
+const PCT_DEBUG = false // sett true ved feilsøking
+const PCT_DEBUG_IDS = new Set<number>() // legg inn trade-id'er hvis du vil filtrere
 
 const processedTradeLog = computed<ProcessedTrade[]>(() => {
-  if (!results.value?.trade_log) return [];
+  if (!results.value?.trade_log) return []
 
   // 5.1 Gruppe entry/exit
   const grouped: { entry: TradeEvent; exit?: TradeEvent }[] = (() => {
-    const byId = new Map<number, { entry?: TradeEvent; exit?: TradeEvent }>();
+    const byId = new Map<number, { entry?: TradeEvent; exit?: TradeEvent }>()
     for (const ev of results.value!.trade_log) {
-      const g = byId.get(ev.trade_id) ?? {};
-      if (ev.event_type === 'Entry') g.entry = ev;
-      if (ev.event_type === 'Exit')  g.exit  = ev;
-      byId.set(ev.trade_id, g);
+      const g = byId.get(ev.trade_id) ?? {}
+      if (ev.event_type === 'Entry') g.entry = ev
+      if (ev.event_type === 'Exit') g.exit = ev
+      byId.set(ev.trade_id, g)
     }
-    return Array.from(byId.values()).filter(g => g.entry) as any;
-  })();
+    return Array.from(byId.values()).filter((g) => g.entry) as {
+      entry: TradeEvent
+      exit?: TradeEvent
+    }[]
+  })()
 
   // 5.2 Beregn alle feltene
   // TV-paritet: summer P&L i full presisjon; rund kun når vi viser tallet.
-  let closedCumPrecise = 0; 
+  let closedCumPrecise = 0
 
-  const calc: ProcessedTrade[] = grouped.map(t => {
-    const closed   = !!t.exit;
+  const calc: ProcessedTrade[] = grouped.map((t) => {
+    const closed = !!t.exit
 
     // ---------- 1. Rå tall --------------------------------------------------
-    const pnlRaw   = closed ? t.exit!.pnl!             : t.entry.pnl!; // inkl. fees (netto)
-    const ruRaw    = closed ? t.exit!.run_up_amount!   : t.entry.run_up_amount!;
-    const ddRaw    = closed ? t.exit!.drawdown_amount! : t.entry.drawdown_amount!;
+    const pnlRaw = closed ? t.exit!.pnl! : t.entry.pnl! // inkl. fees (netto)
+    const ruRaw = closed ? t.exit!.run_up_amount! : t.entry.run_up_amount!
+    const ddRaw = closed ? t.exit!.drawdown_amount! : t.entry.drawdown_amount!
 
     // TV-basis for %: ALLTID entry-qty (også på lukkede trades)
-    const qtyForPct = t.entry.quantity;
+    const qtyForPct = t.entry.quantity
 
     // ---------- 2. Visningstall + integer-basert % (TV-stil) ---------------
-    // Pris vises rundet til tick, qty vises trunket til step (TV)
-    const priceEntryDisp = roundN(t.entry.price, priceDecimals.value);
-    const priceExitDisp  = closed ? roundN(t.exit!.price, priceDecimals.value) : priceEntryDisp;
-    const qtyDisp        = truncN(qtyForPct, qtyDecimals.value);
+    // Display price/quantity at exchange precision without truncating float noise.
+    const priceEntryDisp = roundN(t.entry.price, priceDecimals.value)
+    const priceExitDisp = closed ? roundN(t.exit!.price, priceDecimals.value) : priceEntryDisp
+    const qtyDisp = roundN(qtyForPct, qtyDecimals.value)
 
-    const pnlDisp        = cent(pnlRaw);
-    const runUpDisp      = cent(ruRaw);
-    const drawDnDisp     = cent(ddRaw);
+    const pnlDisp = cent(pnlRaw)
+    const runUpDisp = cent(ruRaw)
+    const drawDnDisp = cent(ddRaw)
 
-    // ---------- 3. Prosent (TV-stil) ----------------------------------------
-    // 4dp (rå, vises som "liten" linje)
-    const pnlPct4        = tvPercent4dp(pnlRaw,  t.entry.price, t.entry.quantity);
-    const runUpPct4      = tvPercent4dp(ruRaw,   t.entry.price, t.entry.quantity);
-    const drawDnPct4     = tvPercent4dp(ddRaw,   t.entry.price, t.entry.quantity);
+    // Use full-precision percentages from the engine, including entry commission
+    // in Mini's denominator. Do not recompute from rounded monetary amounts.
+    const metrics = t.exit ?? t.entry
+    const pnlPct = metrics.pnl_percent ?? tvPercent4dp(pnlRaw, t.entry.price, qtyForPct)
+    const runUpPct = metrics.run_up_percent ?? tvPercent4dp(ruRaw, t.entry.price, qtyForPct)
+    const drawDnPct = metrics.drawdown_percent ?? tvPercent4dp(ddRaw, t.entry.price, qtyForPct)
+    const pnlPct4 = roundN(pnlPct, 4)
+    const runUpPct4 = roundN(runUpPct, 4)
+    const drawDnPct4 = roundN(drawDnPct, 4)
+    const pnlPctDisp2 = roundN(pnlPct, 2)
+    const runUpPctDisp2 = roundN(runUpPct, 2)
+    const drawDnPctDisp2 = roundN(drawDnPct, 2)
 
-    // 2dp (visningslinjen i fet)
-    const pnlPctDisp2    = tvPercent2dp(pnlRaw,  t.entry.price, t.entry.quantity);
-    const runUpPctDisp2  = tvPercent2dp(ruRaw,   t.entry.price, t.entry.quantity);
-    const drawDnPctDisp2 = tvPercent2dp(ddRaw,   t.entry.price, t.entry.quantity);
-  
     if (PCT_DEBUG && (!PCT_DEBUG_IDS.size || PCT_DEBUG_IDS.has(t.entry.trade_id))) {
       console.debug(
-        `[PCTDBG] t#${t.entry.trade_id} expoRaw=${tvBasisRaw(t.entry.price, qtyForPct).toFixed(6)} `
-        + `expoDisp=${tvBasisDisp(t.entry.price, qtyForPct).toFixed(2)} `
-        + `| pnl: ${pnlPctDisp2.toFixed(2)}% (${pnlPct4.toFixed(4)}%) `
-        + `ru: ${runUpPctDisp2.toFixed(2)}% (${runUpPct4.toFixed(4)}%) `
-        + `dd: ${drawDnPctDisp2.toFixed(2)}% (${drawDnPct4.toFixed(4)}%) `
-        + `| amounts: pnl=${cent(pnlRaw).toFixed(2)} ru=${cent(ruRaw).toFixed(2)} dd=${cent(ddRaw).toFixed(2)}`
-      );
+        `[PCTDBG] t#${t.entry.trade_id} expoRaw=${tvBasisRaw(t.entry.price, qtyForPct).toFixed(6)} ` +
+          `expoDisp=${tvBasisDisp(t.entry.price, qtyForPct).toFixed(2)} ` +
+          `| pnl: ${pnlPctDisp2.toFixed(2)}% (${pnlPct4.toFixed(4)}%) ` +
+          `ru: ${runUpPctDisp2.toFixed(2)}% (${runUpPct4.toFixed(4)}%) ` +
+          `dd: ${drawDnPctDisp2.toFixed(2)}% (${drawDnPct4.toFixed(4)}%) ` +
+          `| amounts: pnl=${cent(pnlRaw).toFixed(2)} ru=${cent(ruRaw).toFixed(2)} dd=${cent(ddRaw).toFixed(2)}`,
+      )
     }
-      
+
     // Verdien som vises i "Position size" (kun visning)
-    const entryValDisp = roundN(priceEntryDisp * qtyDisp, 2);
+    const entryValDisp = priceEntryDisp * qtyForPct
     // ---------- 4. Kumulativ PnL (full presisjon), rund KUN ved visning ----
-    if (closed) closedCumPrecise += pnlRaw;                         // <- use raw P&L
-    const cumPrecise = closed ? closedCumPrecise
-                              : closedCumPrecise + pnlRaw;          // include open trade's raw P&L in its own row
-    const cumPnlDisp = cent(cumPrecise);                            // display value
-    const cumPct     = pct2((cumPnlDisp / initialCapital.value) * 100); // beholder eksisterende (matcher allerede)
+    if (closed) closedCumPrecise += pnlRaw // <- use raw P&L
+    const cumPrecise = closed ? closedCumPrecise : closedCumPrecise + pnlRaw // include open trade's raw P&L in its own row
+    const cumPnlDisp = cent(cumPrecise) // display value
+    const cumPct = pct2((cumPnlDisp / initialCapital.value) * 100) // beholder eksisterende (matcher allerede)
 
     return {
       ...t,
 
       // verdier som vises i tabellen
-      positionValue         : entryValDisp,
-      pnlPercent            : pnlPctDisp2,
-      runUpPercent          : runUpPctDisp2,
-      drawdownPercent       : drawDnPctDisp2,
-      pnlPercent4           : pnlPct4,
-      runUpPercent4         : runUpPct4,
-      drawdownPercent4      : drawDnPct4,  
-      cumulativePnl         : cumPnlDisp,
-      cumulativePnlPercent  : cumPct,
+      positionValue: entryValDisp,
+      pnlPercent: pnlPctDisp2,
+      runUpPercent: runUpPctDisp2,
+      drawdownPercent: drawDnPctDisp2,
+      pnlPercent4: pnlPct4,
+      runUpPercent4: runUpPct4,
+      drawdownPercent4: drawDnPct4,
+      cumulativePnl: cumPnlDisp,
+      cumulativePnlPercent: cumPct,
 
       // tallene du faktisk viser i cellene
       entry: { ...t.entry, price: priceEntryDisp, quantity: qtyDisp },
-      exit : t.exit ? { ...t.exit,
-                        price: priceExitDisp,
-                        quantity: qtyDisp,             // vis samme qty som entry (TV viser pos-størrelse)
-                        pnl  : pnlDisp,                // per-trade cell stays rounded
-                        run_up_amount   : runUpDisp,   // ditto
-                        drawdown_amount : drawDnDisp } : undefined
-    };
-});
+      exit: t.exit
+        ? {
+            ...t.exit,
+            price: priceExitDisp,
+            quantity: qtyDisp, // vis samme qty som entry (TV viser pos-størrelse)
+            pnl: pnlDisp, // per-trade cell stays rounded
+            run_up_amount: runUpDisp, // ditto
+            drawdown_amount: drawDnDisp,
+          }
+        : undefined,
+    }
+  })
 
   // 5.3  Vis nyeste øverst
-  return calc.reverse();
-});
-
+  return calc.reverse()
+})
 
 /* ------------------------------------------------------------------
-   6.  (Debug-kode kan stå eller fjernes) 
+   6.  (Debug-kode kan stå eller fjernes)
 --------------------------------------------------------------------*/
 /* const runDebug = async () => {
   console.log("Running Stepped VWAP debug...");
@@ -978,9 +1162,9 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
 
     if (debugKlines.value) {
       const wasm = await (await import('@/rust/pkg/rust_backtest_proprietary.js')).default();
-      
+
       const vwapResults = wasm.calculate_vwap_stepped_debug(debugKlines.value);
-      
+
       console.log("--- DEBUG VWAP STEPPED VALUES ---");
       console.log("Running (cumulative) VWAP:", vwapResults.running_vwap);
       console.log("Stepped (weekly) VWAP:", vwapResults.stepped_vwap);
@@ -1003,8 +1187,8 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
   max-width: 90vw; /* Gjør dashbordet bredt */
   margin: 0 auto;
   padding: 1rem;
-  --label-width: 170px;   /* Justér denne for å skyve alle inputfelt til høyre / venstre */
-  --section-gap: 1.5rem;  /* felles spacing-variabel for seksjoner/knapp */
+  --label-width: 170px; /* Justér denne for å skyve alle inputfelt til høyre / venstre */
+  --section-gap: 1.5rem; /* felles spacing-variabel for seksjoner/knapp */
 }
 
 .control-panel,
@@ -1021,13 +1205,15 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
   gap: 1rem;
 }
 @media (min-width: 1200px) {
-  .controls-grid { grid-template-columns: 1fr 1fr; }
+  .controls-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 /* Compact section titles */
 .section-title {
   color: #eee;
-  margin: 1.0rem 0 -1.2rem 0;     /* small bottom gap so content sits tight */
+  margin: 1rem 0 -1.2rem 0; /* small bottom gap so content sits tight */
   font-weight: 600;
   border: 0;
   padding: 0;
@@ -1051,7 +1237,6 @@ fieldset legend {
   font-size: 1.4rem;
 }
 
-
 /* Styling for nøkkeltallene */
 .summary-metrics {
   display: flex;
@@ -1061,7 +1246,7 @@ fieldset legend {
   /* Top piece of the fused card */
   margin: 0;
   border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;  
+  border-bottom-right-radius: 0;
 }
 .summary-metrics div {
   flex: 1; /* Gir lik bredde til hver nøkkeltall-div */
@@ -1070,11 +1255,11 @@ fieldset legend {
 /* Bottom piece of the fused card */
 .chart-card {
   border: 1px solid #444;
-  border-top: 0;                          /* seam disappears */
+  border-top: 0; /* seam disappears */
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
-  padding: 0;                             /* chart hugs the edge */
-  overflow: hidden;                       /* hide inner overflow from chart lib */
+  padding: 0; /* chart hugs the edge */
+  overflow: hidden; /* hide inner overflow from chart lib */
 }
 
 /* Kill any unexpected top-margins inside the chart component */
@@ -1096,14 +1281,14 @@ fieldset legend {
 /* Generell styling */
 h1 {
   text-align: center;
-  margin-top: -3.5rem;   
-  margin-bottom: 0.8rem;   
+  margin-top: -3.5rem;
+  margin-bottom: 0.8rem;
   color: #eee;
 }
 h2 {
   text-align: center;
-  margin-bottom: 0.8rem;   /* strammere mellom tittel og kontroller */
-  color: #bbb;             /* litt mer dempet enn h1 */
+  margin-bottom: 0.8rem; /* strammere mellom tittel og kontroller */
+  color: #bbb; /* litt mer dempet enn h1 */
   font-size: 1rem;
   font-weight: 500;
 }
@@ -1112,16 +1297,16 @@ h3 {
   color: #eee;
   border: 0;
   padding: 0;
-  margin: 1.2rem 0 .6rem;   /* topp → litt luft fra forrige seksjon, bunn → tett på innholdet */
+  margin: 1.2rem 0 0.6rem; /* topp → litt luft fra forrige seksjon, bunn → tett på innholdet */
   font-weight: 600;
 }
 /* Første tittel i resultatskortet trenger ikke topp-luft */
-.results-panel h3:first-child { 
-  margin-top: 0; 
+.results-panel h3:first-child {
+  margin-top: 0;
 }
 /* Tighten space before the trades table */
 .results-panel table {
-  margin-top: .25rem;                     /* was 1rem */
+  margin-top: 0.25rem; /* was 1rem */
 }
 /* Kolonnekort (Inputs / Properties) */
 .col-card {
@@ -1132,17 +1317,18 @@ h3 {
 }
 
 /* Underseksjoner i et kolonne-kort */
-.group + .group {            /* separator mellom grupper */
+.group + .group {
+  /* separator mellom grupper */
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid #444;
 }
 .group-title {
-  margin: 0 0 .6rem 0;
+  margin: 0 0 0.6rem 0;
   color: #aab;
-  font-size: .85rem;
+  font-size: 0.85rem;
   text-transform: uppercase;
-  letter-spacing: .03em;
+  letter-spacing: 0.03em;
   font-weight: 600;
 }
 
@@ -1152,12 +1338,14 @@ h3 {
   align-items: center;
   margin-bottom: 0.5rem;
 }
-.row:last-child { margin-bottom: 0; }
+.row:last-child {
+  margin-bottom: 0;
+}
 /* Checkbox-rader: ikke bruk label-kolonnebredden */
 .row-checkbox {
   gap: 10px;
   padding-left: var(--label-width); /* indenter slik at checkboxen står på linje med inputs */
-  flex-wrap: nowrap;                /* aldri bryt linjen */
+  flex-wrap: nowrap; /* aldri bryt linjen */
 }
 .row-checkbox .inline-label {
   width: auto !important;
@@ -1165,7 +1353,7 @@ h3 {
   flex: 0 1 auto !important;
   margin: 0 !important;
   text-align: left !important;
-  white-space: nowrap;              /* hindrer linjebrudd i teksten */
+  white-space: nowrap; /* hindrer linjebrudd i teksten */
 }
 /* Valgfritt: snevr inn at kolonnebredde kun gjelder "vanlige" rader */
 .row > label:not(.inline-label) {
@@ -1176,7 +1364,9 @@ h3 {
   margin-right: 10px;
   color: #ccc;
 }
-.row-disabled { opacity: .6; }
+.row-disabled {
+  opacity: 0.6;
+}
 input[type='text'],
 input[type='number'],
 select {
@@ -1194,7 +1384,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 420px;      /* samme bredde som før */
+  max-width: 420px; /* samme bredde som før */
 }
 preset-col textarea {
   width: 100%;
@@ -1205,14 +1395,17 @@ preset-col textarea {
   align-items: center;
 }
 /* Loddrett for metode-spesifikke felt (Fixed/Trailing/Combined/RB) */
-.method-rows .row { margin-bottom: 0.5rem; }
+.method-rows .row {
+  margin-bottom: 0.5rem;
+}
 
 /* Liten hint-tekst ved RB */
-.hint { 
-  margin-left: 20px; 
-  margin-bottom: -22px; 
-  color: #aaa; 
-  font-size: 0.9em; }
+.hint {
+  margin-left: 20px;
+  margin-bottom: -22px;
+  color: #aaa;
+  font-size: 0.9em;
+}
 button {
   padding: 10px 20px;
   background-color: #007bff;
@@ -1229,18 +1422,22 @@ button:disabled {
 
 /* Run Backtest: ikke full bredde og lik avstand som mellom seksjonene */
 .run-btn {
-  width: auto;                 /* ikke 100% bredde */
-  min-width: 220px;            /* litt «tyngde» */
-  align-self: center;          /* behold sentrering (kan byttes til flex-start) */
+  width: auto; /* ikke 100% bredde */
+  min-width: 220px; /* litt «tyngde» */
+  align-self: center; /* behold sentrering (kan byttes til flex-start) */
   margin-top: var(--section-gap); /* samme vertikale avstand som fieldsets */
 }
 
 /* (valgfritt) litt responsivitet */
 @media (max-width: 900px) {
-  .dashboard-view { --label-width: 140px; }
+  .dashboard-view {
+    --label-width: 140px;
+  }
 }
 @media (max-width: 720px) {
-  .dashboard-view { --label-width: 120px; }
+  .dashboard-view {
+    --label-width: 120px;
+  }
 }
 
 /* NYTT: Litt styling for prosentverdiene for å matche TradingView */
@@ -1252,7 +1449,7 @@ button:disabled {
 
 .percent-small {
   font-size: 0.85em;
-  opacity: .75;
+  opacity: 0.75;
   font-variant-numeric: tabular-nums; /* ryddigere kolonne */
 }
 
@@ -1275,17 +1472,16 @@ th {
   color: #f0f0f0;
   font-weight: bold;
 }
-td[rowspan="2"] {
+td[rowspan='2'] {
   vertical-align: middle; /* Sentrer innholdet i celler som spenner over to rader */
   text-align: center;
 }
 /* Overstyrer første kolonne (Trade #) av regelen som står rett ovenfor */
-td[rowspan="2"]:first-child {
+td[rowspan='2']:first-child {
   text-align: left;
 }
 tr > td:nth-child(5), /* Price */
-tr > td:nth-child(4)  /* Date/Time */
-{
+tr > td:nth-child(4)  /* Date/Time */ {
   text-align: left;
 }
 
@@ -1298,21 +1494,47 @@ tr > td:nth-child(4)  /* Date/Time */
 .loss {
   color: #f44336;
   font-weight: 500;
-    opacity: 0.86; /* Litt svakere for bedre lesbarhet */
+  opacity: 0.86; /* Litt svakere for bedre lesbarhet */
 }
 
 .tip {
-  position:relative; display:inline-flex; align-items:center; justify-content:center;
-  width:18px; height:18px; margin-left:6px; border-radius:50%; background:#555; color:#fff;
-  font-size:16px; cursor:help; outline:none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #555;
+  color: #fff;
+  font-size: 16px;
+  cursor: help;
+  outline: none;
 }
 .tip-content {
-  position:absolute; left:50%; transform:translateX(-50%);
-  bottom:130%; min-width:590px; max-width:590px; padding:8px 10px; border-radius:6px;
-  background:#111; color:#eee; border:1px solid #444; box-shadow:0 6px 20px rgba(0,0,0,.35);
-  opacity:0; pointer-events:none; transition:opacity .12s ease; z-index:10; white-space:normal;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 130%;
+  min-width: 590px;
+  max-width: 590px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #111;
+  color: #eee;
+  border: 1px solid #444;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 10;
+  white-space: normal;
 }
-.tip:hover .tip-content, .tip:focus .tip-content { opacity:1; }
+.tip:hover .tip-content,
+.tip:focus .tip-content {
+  opacity: 1;
+}
 
 .trade-id {
   color: #bbb;
@@ -1326,13 +1548,15 @@ tr > td:nth-child(4)  /* Date/Time */
   font-size: 1em;
 }
 
-.dir-long {            /* blå som TV */
-  color: #3b82f6;      /* ~Tailwind blue-500 */
+.dir-long {
+  /* blå som TV */
+  color: #3b82f6; /* ~Tailwind blue-500 */
   opacity: 0.86; /* Litt svakere for bedre lesbarhet */
 }
 
-.dir-short {           /* rød som TV */
-  color: #ef4444;      /* ~Tailwind red-500 */
-  opacity: 0.86; /* Litt svakere for bedre lesbarhet */  
+.dir-short {
+  /* rød som TV */
+  color: #ef4444; /* ~Tailwind red-500 */
+  opacity: 0.86; /* Litt svakere for bedre lesbarhet */
 }
 </style>

@@ -127,9 +127,13 @@ export async function fetchBinanceKlines(
   symbol: string,
   interval: string,
   totalLimit: number = 1000, // Representerer nå totalt ønsket antall
+  endTimeExclusive?: number,
 ): Promise<Kline[]> {
+  if (endTimeExclusive !== undefined && !Number.isFinite(endTimeExclusive)) {
+    throw new Error('Invalid backtest end time.');
+  }
   let allKlines: Kline[] = []
-  let currentEndTime: number | undefined = undefined // Start med å hente de nyeste
+  let currentEndTime = endTimeExclusive // Undefined preserves the latest-bars mode.
   let fetchedCount = 0
   const maxIterations = Math.ceil(totalLimit / MAX_KLINE_LIMIT_PER_REQUEST) + 5 // Sikkerhetsgrense
   let iterations = 0

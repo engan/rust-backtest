@@ -10,7 +10,8 @@ export function useKlines() {
   async function loadKlines(
     symbol: string,
     interval: string,
-    totalLimit: number = 1000 // Betyr nå totalt antall ønsket
+    totalLimit: number = 1000, // Betyr nå totalt antall ønsket
+    endTimeExclusive?: number,
   ) {
     isLoading.value = true;
     error.value = null;
@@ -18,7 +19,7 @@ export function useKlines() {
 
     try {
       // Kaller den oppdaterte fetchBinanceKlines med totalLimit
-      const fetchedKlines = await fetchBinanceKlines(symbol, interval, totalLimit);
+      const fetchedKlines = await fetchBinanceKlines(symbol, interval, totalLimit, endTimeExclusive);
       klines.value = fetchedKlines;
       console.log(`useKlines: Hentet ${klines.value.length} klines for ${symbol} ${interval} (requested ${totalLimit})`);
     } catch (err: any) {

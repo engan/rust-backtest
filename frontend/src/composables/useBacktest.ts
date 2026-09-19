@@ -50,6 +50,7 @@ export function useBacktest() {
     symbol: string;
     interval: string;
     limit: number;
+    endTimeExclusive?: number;
     initialCapital: number;
     config: BacktestConfig;
     params: SmaParams;
@@ -57,7 +58,7 @@ export function useBacktest() {
     isLoading.value = true;
     try {
       const wasmInst = await getWasm();
-      await loadKlines(opt.symbol, opt.interval, opt.limit);
+      await loadKlines(opt.symbol, opt.interval, opt.limit, opt.endTimeExclusive);
 
       if (error.value) throw new Error(error.value);
       if (!klines.value.length) throw new Error('No klines returned from API.');
@@ -78,6 +79,7 @@ export function useBacktest() {
     symbol: string;
     interval: string;
     limit: number;
+    endTimeExclusive?: number;
     initialCapital: number;
     config: BacktestConfig;
     params: MiniSmaParams;
@@ -86,7 +88,7 @@ export function useBacktest() {
     isLoading.value = true;
     try {
       const wasmInst = await getWasm();
-      await loadKlines(opt.symbol, opt.interval, opt.limit);
+      await loadKlines(opt.symbol, opt.interval, opt.limit, opt.endTimeExclusive);
 
       if (error.value) throw new Error(error.value);
       if (!klines.value?.length) throw new Error('No klines returned from API.');
@@ -115,6 +117,7 @@ export function useBacktest() {
     symbol: string;
     interval: string;
     limit: number;
+    endTimeExclusive?: number;
     initialCapital: number;
     config: BacktestConfig;
     params: EmaVwapParams;
@@ -122,7 +125,7 @@ export function useBacktest() {
     isLoading.value = true;
     try {
       const wasmInst = await getWasm();
-      await loadKlines(opt.symbol, opt.interval, opt.limit);
+      await loadKlines(opt.symbol, opt.interval, opt.limit, opt.endTimeExclusive);
 
       if (error.value) throw new Error(error.value);
       if (!klines.value.length) throw new Error('No klines returned from API.');
