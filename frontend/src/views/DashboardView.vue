@@ -484,9 +484,9 @@
                 <td>{{ signalLabel(trade.exit) }}</td>
                 <td>{{ trade.exit.price.toFixed(2) }} {{ quoteCurrency }}</td>
                 <td :rowspan="2" style="text-align: center">
-                  <div>{{ trade.exit.quantity.toFixed(qtyDecimals) }}</div>
+                  <div>{{ trade.exit.quantity.toFixed(2) }}</div>
                   <div class="percent-value">
-                    {{ trade.positionValue.toFixed(5) }}&nbsp;{{ quoteCurrency }}
+                    {{ formatPositionValue(trade.positionValue) }}&nbsp;{{ quoteCurrency }}
                   </div>
                 </td>
 
@@ -573,9 +573,9 @@
 
                 <!-- Quantity/pos-verdi over to rader -->
                 <td :rowspan="2" style="text-align: center">
-                  <div>{{ trade.entry.quantity.toFixed(qtyDecimals) }}</div>
+                  <div>{{ trade.entry.quantity.toFixed(2) }}</div>
                   <div class="percent-value">
-                    {{ trade.positionValue.toFixed(5) }}&nbsp;{{ quoteCurrency }}
+                    {{ formatPositionValue(trade.positionValue) }}&nbsp;{{ quoteCurrency }}
                   </div>
                 </td>
 
@@ -711,6 +711,21 @@ const tvFmt2 = (x?: number) => {
   if (x === undefined || x === null || !isFinite(x)) return '0.00'
   const safe = Math.abs(x) < 0.005 ? 0 : x // unngå "-0.00"
   return roundN(safe, 2).toFixed(2)
+}
+
+// TradingView uses three significant digits for compact position values.
+const formatPositionValue = (value: number) => {
+  const abs = Math.abs(value)
+  const compact = (divisor: number, suffix: string) =>
+    `${new Intl.NumberFormat('en-US', {
+      maximumSignificantDigits: 3,
+      useGrouping: false,
+    }).format(value / divisor)} ${suffix}`
+
+  if (abs >= 1_000_000_000) return compact(1_000_000_000, 'B')
+  if (abs >= 1_000_000) return compact(1_000_000, 'M')
+  if (abs >= 1_000) return compact(1_000, 'K')
+  return value.toFixed(2)
 }
 
 // Prosent slik TV kalkulerer:
