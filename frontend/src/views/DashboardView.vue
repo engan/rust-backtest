@@ -293,11 +293,26 @@
               <label for="limit">Data Limit:</label>
               <input id="limit" v-model.number="dataLimitForFetch" type="number" />
             </div>
-            <div class="row">
-              <label for="end-before">End before (UTC):</label>
-              <input id="end-before" v-model="endBeforeUtc" type="datetime-local" />
+            <div class="advanced-data-settings">
+              <button
+                type="button"
+                class="advanced-data-toggle"
+                :aria-expanded="showHistoricalCutoff"
+                @click="showHistoricalCutoff = !showHistoricalCutoff"
+              >
+                <span aria-hidden="true">{{ showHistoricalCutoff ? '▾' : '▸' }}</span>
+                Historical cutoff (UTC)
+              </button>
+              <div v-if="showHistoricalCutoff" class="advanced-data-panel">
+                <input
+                  id="end-before"
+                  v-model="endBeforeUtc"
+                  type="datetime-local"
+                  aria-label="Historical cutoff in UTC"
+                />
+                <p>Leave empty to use the latest bars.</p>
+              </div>
             </div>
-            <p class="hint">Leave empty for latest bars. A fixed end time makes the test repeatable.</p>
             <!-- TV preset UI – vises kun når aktivert -->
             <div class="row" v-if="presetEnabled">
               <label for="tvpreset">Paste TV preset JSON:</label>
@@ -910,6 +925,7 @@ console.log('params.sma:', JSON.stringify(smaParams))
 // Manuelt Data Limit (ingen auto-beregning)
 const dataLimitForFetch = ref<number>(10000)
 const endBeforeUtc = ref('')
+const showHistoricalCutoff = ref(false)
 
 function showPreset() {
   if (!tvPreset.value) {
@@ -1369,6 +1385,7 @@ h3 {
 }
 input[type='text'],
 input[type='number'],
+input[type='datetime-local'],
 select {
   flex-grow: 1; /* La input-feltene vokse for å fylle plassen */
   padding: 8px;
@@ -1377,6 +1394,37 @@ select {
   background-color: #3a3a3a;
   color: #eee;
   max-width: 210px; /* Gi en maks bredde for å unngå for lange felt */
+}
+.advanced-data-settings {
+  width: 210px;
+  margin: 0.1rem 0 0 calc(var(--label-width) + 10px);
+  color: #aaa;
+  font-size: 0.85rem;
+}
+.advanced-data-settings .advanced-data-toggle {
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+  width: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #aaa;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.advanced-data-panel {
+  margin-top: 0.5rem;
+}
+.advanced-data-settings input {
+  box-sizing: border-box;
+  width: 100%;
+}
+.advanced-data-settings p {
+  margin: 0.35rem 0 0;
+  line-height: 1.35;
 }
 /* --- TV preset layout (textarea med knapper under) --- */
 .preset-col {
