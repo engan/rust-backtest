@@ -166,15 +166,6 @@ function debugString(val) {
     // TODO we could test for more things here, like `Set`s and `Map`s.
     return className;
 }
-/**
- * @param {any} data_js
- * @param {number} period
- * @returns {any}
- */
-export function calculate_ema_debug(data_js, period) {
-    const ret = wasm.calculate_ema_debug(data_js, period);
-    return ret;
-}
 
 function takeFromExternrefTable0(idx) {
     const value = wasm.__wbindgen_export_4.get(idx);
@@ -250,6 +241,16 @@ export function run_ema_vwap_strategy(klines_js, config_js, initial_capital, par
         throw takeFromExternrefTable0(ret[1]);
     }
     return takeFromExternrefTable0(ret[0]);
+}
+
+/**
+ * @param {any} data_js
+ * @param {number} period
+ * @returns {any}
+ */
+export function calculate_ema_debug(data_js, period) {
+    const ret = wasm.calculate_ema_debug(data_js, period);
+    return ret;
 }
 
 async function __wbg_load(module, imports) {
@@ -331,6 +332,16 @@ function __wbg_get_imports() {
         const ret = result;
         return ret;
     };
+    imports.wbg.__wbg_instanceof_Map_f3469ce2244d2430 = function(arg0) {
+        let result;
+        try {
+            result = arg0 instanceof Map;
+        } catch (_) {
+            result = false;
+        }
+        const ret = result;
+        return ret;
+    };
     imports.wbg.__wbg_instanceof_Uint8Array_17156bcf118086a9 = function(arg0) {
         let result;
         try {
@@ -360,9 +371,6 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_length_e2d2a49132c1b256 = function(arg0) {
         const ret = arg0.length;
         return ret;
-    };
-    imports.wbg.__wbg_log_65f6864e580ee006 = function(arg0, arg1) {
-        console.log(getStringFromWasm0(arg0, arg1));
     };
     imports.wbg.__wbg_log_919539419eed00ef = function(arg0, arg1) {
         console.log(getStringFromWasm0(arg0, arg1));

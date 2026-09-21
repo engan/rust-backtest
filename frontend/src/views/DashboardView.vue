@@ -72,14 +72,66 @@
               </span>
             </div>
             <div class="row">
-              <label for="fl_atr">ATR Volatility Threshold</label>
+              <label for="fl_atr">ATR Threshold (absolute):</label>
               <input
                 id="fl_atr"
                 type="number"
                 step="0.1"
                 v-model.number="smaParams.atr_threshold_fl"
+                :disabled="isImproved && smaParams.atr_threshold_percent"
               />
             </div>
+            <template v-if="isImproved">
+              <div class="row">
+                <label for="atr_units">ATR threshold units:</label>
+                <select id="atr_units" v-model="smaParams.atr_threshold_percent">
+                  <option :value="false">Absolute (legacy)</option>
+                  <option :value="true">Percent of price</option>
+                </select>
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">
+                    Percent uses 100 × ATR[1] / close[1] on the signal bar. This only changes the
+                    Fashionably Late gate, not stop distances or position sizing.
+                  </span></span
+                >
+              </div>
+              <div v-if="smaParams.atr_threshold_percent" class="row">
+                <label for="atr_percent">ATR Threshold (%):</label>
+                <input
+                  id="atr_percent"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  v-model.number="smaParams.atr_threshold_fl_percent"
+                />
+              </div>
+              <div class="row row-checkbox">
+                <input id="reset_fl" type="checkbox" v-model="smaParams.reset_fl_on_opposite" />
+                <label for="reset_fl" class="inline-label">Cancel FL on opposite SMA cross</label>
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">
+                    Cancels a pending breakout when the opposite cross occurs, including crosses
+                    outside the selected trading direction.
+                  </span></span
+                >
+              </div>
+              <div class="row">
+                <label for="fl_expiry">Maximum FL wait (bars):</label>
+                <input
+                  id="fl_expiry"
+                  type="number"
+                  min="0"
+                  step="1"
+                  v-model.number="smaParams.fl_expiry_bars"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">
+                    Zero means unlimited. A signal can trigger on the next N bars, never its own
+                    arming bar. All pending signals are cleared on pause and restart.
+                  </span></span
+                >
+              </div>
+            </template>
           </section>
 
           <!-- SL/TP -->
@@ -171,7 +223,7 @@
             <div class="group-title">Risk &amp; Position Sizing</div>
 
             <!-- Kun for Risk-Based -->
-            <div class="row" v-if="isRiskBased">
+            <div class="row">
               <label for="sma_atr_len">ATR Length:</label>
               <input id="sma_atr_len" type="number" v-model.number="smaParams.atr_length" />
             </div>
@@ -198,119 +250,176 @@
 
           <section class="group">
             <div class="group-title">Risk Safeguards and Limits</div>
+            <fieldset class="safeguard-fields">
+              <div class="row row-checkbox">
+                <input
+                  id="enable_max_drawdown"
+                  type="checkbox"
+                  v-model="smaParams.enable_max_drawdown"
+                />
+                <label for="enable_max_drawdown" class="inline-label">
+                  Enable Maximum Drawdown Control
+                </label>
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content"
+                    >Stops new entries and closes at the next bar open when drawdown reaches the
+                    limit. Improved resumes after cooldown and ADX confirmation, then resets the
+                    drawdown reference to current equity. This is not a guaranteed loss cap.</span
+                  ></span
+                >
+              </div>
+              <div class="row">
+                <label for="max_drawdown_perc">Maximum Drawdown (%):</label>
+                <input
+                  id="max_drawdown_perc"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  v-model.number="smaParams.max_drawdown_perc"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content"
+                    >Maximum allowed drawdown percentage before trading stops.</span
+                  ></span
+                >
+              </div>
 
-            <div class="row row-checkbox">
-              <input
-                id="enable_max_drawdown"
-                type="checkbox"
-                v-model="smaParams.enable_max_drawdown"
-              />
-              <label for="enable_max_drawdown" class="inline-label">
-                Enable Maximum Drawdown Control
-              </label>
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content"
-                  >Enable to set a maximum drawdown percentage. Trading stops if drawdown exceeds
-                  this limit.</span
-                ></span
-              >
-            </div>
-            <div class="row">
-              <label for="max_drawdown_perc">Maximum Drawdown (%):</label>
-              <input
-                id="max_drawdown_perc"
-                type="number"
-                min="0"
-                step="0.1"
-                v-model.number="smaParams.max_drawdown_perc"
-              />
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content"
-                  >Maximum allowed drawdown percentage before trading stops.</span
-                ></span
-              >
-            </div>
+              <div class="row row-checkbox">
+                <input
+                  id="enable_max_consecutive_losses"
+                  type="checkbox"
+                  v-model="smaParams.enable_max_consecutive_losses"
+                />
+                <label for="enable_max_consecutive_losses" class="inline-label">
+                  Enable Maximum Consecutive Losses Control
+                </label>
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content"
+                    >Counts net losing trades. In Improved, the loss counter resets only after a
+                    successful restart. Legacy can remain stopped permanently.</span
+                  ></span
+                >
+              </div>
+              <div class="row">
+                <label for="max_consecutive_losses">Maximum Consecutive Losses:</label>
+                <input
+                  id="max_consecutive_losses"
+                  type="number"
+                  min="1"
+                  step="1"
+                  v-model.number="smaParams.max_consecutive_losses"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content"
+                    >Maximum number of consecutive losing trades allowed before trading stops.</span
+                  ></span
+                >
+              </div>
 
-            <div class="row row-checkbox">
-              <input
-                id="enable_max_consecutive_losses"
-                type="checkbox"
-                v-model="smaParams.enable_max_consecutive_losses"
-              />
-              <label for="enable_max_consecutive_losses" class="inline-label">
-                Enable Maximum Consecutive Losses Control
-              </label>
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content"
-                  >Enable to limit consecutive losing trades. Trading stops after the specified
-                  number of losses.</span
-                ></span
-              >
-            </div>
-            <div class="row">
-              <label for="max_consecutive_losses">Maximum Consecutive Losses:</label>
-              <input
-                id="max_consecutive_losses"
-                type="number"
-                min="2"
-                step="1"
-                v-model.number="smaParams.max_consecutive_losses"
-              />
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content"
-                  >Maximum number of consecutive losing trades allowed before trading stops.</span
-                ></span
-              >
-            </div>
+              <div v-if="isImproved" class="row">
+                <label for="cooldown_bars">Cooldown after loss/drawdown (bars):</label>
+                <input
+                  id="cooldown_bars"
+                  type="number"
+                  min="1"
+                  step="1"
+                  v-model.number="smaParams.cooldown_bars"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">
+                    Shared pause after either the consecutive-loss limit or the drawdown limit is
+                    reached. The timer starts on the first completed bar that is flat. For example,
+                    48 bars is 48 hours on 1h and 12 hours on 15m. ADX recovery is also required
+                    when enabled.
+                  </span></span
+                >
+              </div>
 
-            <div class="row row-checkbox">
-              <input id="enable_dmi_filter" type="checkbox" v-model="smaParams.enable_dmi_filter" />
-              <label for="enable_dmi_filter" class="inline-label">Enable DMI Filter</label>
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content"
-                  >Enable the DMI filter for trend confirmation.</span
-                ></span
-              >
-            </div>
-            <div class="row">
-              <label for="dmi_length">DMI Length:</label>
-              <input
-                id="dmi_length"
-                type="number"
-                min="1"
-                step="1"
-                v-model.number="smaParams.dmi_length"
-              />
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content">Length of the DMI indicator.</span></span
-              >
-            </div>
-            <div class="row">
-              <label for="dmi_smoothing">DMI Smoothing Length:</label>
-              <input
-                id="dmi_smoothing"
-                type="number"
-                min="1"
-                step="1"
-                v-model.number="smaParams.dmi_smoothing"
-              />
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content">Smoothing length for the DMI indicator.</span></span
-              >
-            </div>
-            <div class="row">
-              <label for="dmi_threshold">DMI Threshold:</label>
-              <input
-                id="dmi_threshold"
-                type="number"
-                min="0"
-                step="0.1"
-                v-model.number="smaParams.dmi_threshold"
-              />
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content">Threshold value for the DMI filter.</span></span
-              >
-            </div>
+              <div class="row row-checkbox">
+                <input
+                  id="enable_dmi_filter"
+                  type="checkbox"
+                  v-model="smaParams.enable_dmi_filter"
+                />
+                <label for="enable_dmi_filter" class="inline-label"
+                  >Enable ADX trend-strength filter</label
+                >
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content"
+                    >Filters trend strength using ADX, not direction. Improved blocks entries during
+                    warm-up and requires confirmed recovery above the resume threshold.</span
+                  ></span
+                >
+              </div>
+              <div class="row">
+                <label for="dmi_length">DMI Length:</label>
+                <input
+                  id="dmi_length"
+                  type="number"
+                  min="1"
+                  step="1"
+                  v-model.number="smaParams.dmi_length"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">Length of the DMI indicator.</span></span
+                >
+              </div>
+              <div class="row">
+                <label for="dmi_smoothing">DMI Smoothing Length:</label>
+                <input
+                  id="dmi_smoothing"
+                  type="number"
+                  min="1"
+                  step="1"
+                  v-model.number="smaParams.dmi_smoothing"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">Smoothing length for the DMI indicator.</span></span
+                >
+              </div>
+              <div class="row">
+                <label for="dmi_threshold">ADX pause below:</label>
+                <input
+                  id="dmi_threshold"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  v-model.number="smaParams.dmi_threshold"
+                />
+                <span class="tip" tabindex="0"
+                  >ⓘ<span class="tip-content">Threshold value for the DMI filter.</span></span
+                >
+              </div>
+              <template v-if="isImproved">
+                <div class="row">
+                  <label for="adx_resume">ADX resume at or above:</label>
+                  <input
+                    id="adx_resume"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.05"
+                    v-model.number="smaParams.adx_resume_threshold"
+                  />
+                </div>
+                <div class="row">
+                  <label for="adx_confirmation">ADX confirmation (bars):</label>
+                  <input
+                    id="adx_confirmation"
+                    type="number"
+                    min="1"
+                    step="1"
+                    v-model.number="smaParams.adx_resume_bars"
+                  />
+                  <span class="tip" tabindex="0"
+                    >ⓘ<span class="tip-content">
+                      Consecutive completed bars at or above the resume threshold. Between pause and
+                      resume thresholds, ADX keeps its current running/paused state.
+                    </span></span
+                  >
+                </div>
+              </template>
+            </fieldset>
           </section>
         </fieldset>
 
@@ -518,6 +627,7 @@
 
     <div class="results-panel" v-if="results">
       <h3 class="section-title">Backtest Results</h3>
+      <p v-if="resultBehavior" class="mode-note">Behavior mode: {{ resultBehavior }}</p>
 
       <!-- Metrics + Chart merged into a single visual card -->
       <div class="results-stack">
@@ -829,12 +939,12 @@ const tvFmt2 = (x?: number) => {
   return roundN(safe, 2).toFixed(2)
 }
 
-// TradingView uses three significant digits for compact position values.
+// Keep up to two decimals after scaling, e.g. 11.76 K or 5.9 K.
 const formatPositionValue = (value: number) => {
   const abs = Math.abs(value)
   const compact = (divisor: number, suffix: string) =>
     `${new Intl.NumberFormat('en-US', {
-      maximumSignificantDigits: 3,
+      maximumFractionDigits: 2,
       useGrouping: false,
     }).format(value / divisor)} ${suffix}`
 
@@ -894,12 +1004,21 @@ function signalLabel(ev: TradeEvent): string {
     maxdrawdownclose: 'Max Drawdown Close',
     maxconsecutivelossesclose: 'Max Consecutive Losses Close',
     dmiweaktrendclose: 'DMI Weak Trend Close',
+    drawdownandlossesclose: 'Maximum drawdown + consecutive losses Close',
+    nonpositiveequityclose: 'Non-positive equity Close',
+    adxwarmupclose: 'ADX warm-up Close',
+    adxrecoveryclose: 'ADX recovery Close',
     // Entry/Exit
     reversal: 'Reversal',
     closeopposite: 'Close Opposite',
   }
 
   const reason = TITLE[key] ?? ''
+  if (key.endsWith('close') && !['flclose'].includes(key)) {
+    if (key === 'maxdrawdownclose') return 'Maximum drawdown Close'
+    if (key === 'maxconsecutivelossesclose') return 'Consecutive losses Close'
+    return reason || side
+  }
   return reason ? `${side} ${reason}` : side
 }
 
@@ -996,8 +1115,16 @@ const BINANCE_INTERVALS = [
 const timeframe = ref<(typeof BINANCE_INTERVALS)[number]>('1h')
 const selectedStrategy = ref<'smaCross' | 'emaVwap'>('smaCross')
 
-// `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
+// Canonical parameters for the SMA Crossover strategy.
 const smaParams = reactive<SmaParams>({
+  behavior_mode: 'Improved',
+  atr_threshold_percent: false,
+  atr_threshold_fl_percent: 1.0,
+  reset_fl_on_opposite: true,
+  fl_expiry_bars: 48,
+  cooldown_bars: 48,
+  adx_resume_threshold: 16.0,
+  adx_resume_bars: 3,
   fast_period: 10,
   slow_period: 73,
   order_size_mode: OrderSizeMode.PercentOfEquity,
@@ -1024,7 +1151,7 @@ const smaParams = reactive<SmaParams>({
   enable_max_drawdown: true,
   max_drawdown_perc: 22.0,
   enable_max_consecutive_losses: true,
-  max_consecutive_losses: 10,
+  max_consecutive_losses: 5,
   enable_dmi_filter: true,
   dmi_length: 6,
   dmi_smoothing: 24,
@@ -1033,6 +1160,7 @@ const smaParams = reactive<SmaParams>({
 
 // Aktiv RB? (gjelder nå for både Full og Mini)
 const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBased)
+const isImproved = computed(() => smaParams.behavior_mode === 'Improved')
 
 // Order Size-verdi er inaktiv når Risk-Based styrer sizing
 const disableOrderSizeValue = computed(() => isRiskBased.value)
@@ -1044,6 +1172,7 @@ const slippageTicks = ref(2)
 // --- Resultat variabler ---
 const initialCapital = ref(10000)
 const results = ref<BacktestResult | null>(null)
+const resultBehavior = ref('')
 const quoteCurrency = ref('USDT')
 
 // Slutt = siste bar i equity-curve (når resultater finnes)
@@ -1086,6 +1215,8 @@ function clearPreset() {
 --------------------------------------------------------------------*/
 const runBacktest = async () => {
   results.value = null // Nullstill gamle resultater
+  resultBehavior.value = ''
+  const runParams = { ...smaParams }
   isLoading.value = true
 
   // Bestem quoteCurrency basert på symbol
@@ -1129,9 +1260,13 @@ const runBacktest = async () => {
         endTimeExclusive,
         initialCapital: initialCapital.value,
         config: backtestConfig,
-        params: smaParams,
+        params: runParams,
         priceToTick: priceToTick.value,
       })
+      resultBehavior.value =
+        runParams.behavior_mode === 'LegacySafeguards'
+          ? 'Legacy safeguards'
+          : (runParams.behavior_mode ?? 'Legacy safeguards')
     } else if (selectedStrategy.value === 'emaVwap') {
       // VIKTIG: Denne er nå helt lik SMA-kallet, men sender 'params'
       results.value = await runEmaVwapBacktest({
@@ -1380,6 +1515,21 @@ fieldset,
 
 fieldset legend {
   font-size: 1.4rem;
+}
+
+.safeguard-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.safeguard-fields:disabled {
+  opacity: 0.55;
+}
+.mode-note {
+  color: #aaa;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
 }
 
 /* Styling for nøkkeltallene */

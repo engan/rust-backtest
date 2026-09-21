@@ -88,6 +88,14 @@ export interface BacktestResult {
 
 // Typer for SMA Crossover Strategi ---
 export interface SmaParams {
+  behavior_mode?: 'Original' | 'Improved' | 'LegacySafeguards';
+  atr_threshold_percent?: boolean;
+  atr_threshold_fl_percent?: number;
+  reset_fl_on_opposite?: boolean;
+  fl_expiry_bars?: number;
+  cooldown_bars?: number;
+  adx_resume_threshold?: number;
+  adx_resume_bars?: number;
   fast_period: number;
   slow_period: number;
   order_size_mode: OrderSizeMode;
