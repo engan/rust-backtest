@@ -105,15 +105,15 @@ export interface SmaParams {
   trade_direction: TradeDirectionFilter;
   parity_mode?: boolean;
   fashionably_late_mode: FashionablyLateMode,
-  atr_threshold_fl: number,  
-}
-
-// NYTT: Definer typen for de minimale parameterne.
-export interface MiniSmaParams {
-  fast_period: number;
-  slow_period: number;
-  order_size_mode: OrderSizeMode;
-  order_size_value: number;  
+  atr_threshold_fl: number,
+  enable_max_drawdown: boolean;
+  max_drawdown_perc: number;
+  enable_max_consecutive_losses: boolean;
+  max_consecutive_losses: number;
+  enable_dmi_filter: boolean;
+  dmi_length: number;
+  dmi_smoothing: number;
+  dmi_threshold: number;
 }
 
 export interface RoundingFlags {

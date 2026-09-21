@@ -195,6 +195,123 @@
               />
             </div>
           </section>
+
+          <section class="group">
+            <div class="group-title">Risk Safeguards and Limits</div>
+
+            <div class="row row-checkbox">
+              <input
+                id="enable_max_drawdown"
+                type="checkbox"
+                v-model="smaParams.enable_max_drawdown"
+              />
+              <label for="enable_max_drawdown" class="inline-label">
+                Enable Maximum Drawdown Control
+              </label>
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content"
+                  >Enable to set a maximum drawdown percentage. Trading stops if drawdown exceeds
+                  this limit.</span
+                ></span
+              >
+            </div>
+            <div class="row">
+              <label for="max_drawdown_perc">Maximum Drawdown (%):</label>
+              <input
+                id="max_drawdown_perc"
+                type="number"
+                min="0"
+                step="0.1"
+                v-model.number="smaParams.max_drawdown_perc"
+              />
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content"
+                  >Maximum allowed drawdown percentage before trading stops.</span
+                ></span
+              >
+            </div>
+
+            <div class="row row-checkbox">
+              <input
+                id="enable_max_consecutive_losses"
+                type="checkbox"
+                v-model="smaParams.enable_max_consecutive_losses"
+              />
+              <label for="enable_max_consecutive_losses" class="inline-label">
+                Enable Maximum Consecutive Losses Control
+              </label>
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content"
+                  >Enable to limit consecutive losing trades. Trading stops after the specified
+                  number of losses.</span
+                ></span
+              >
+            </div>
+            <div class="row">
+              <label for="max_consecutive_losses">Maximum Consecutive Losses:</label>
+              <input
+                id="max_consecutive_losses"
+                type="number"
+                min="2"
+                step="1"
+                v-model.number="smaParams.max_consecutive_losses"
+              />
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content"
+                  >Maximum number of consecutive losing trades allowed before trading stops.</span
+                ></span
+              >
+            </div>
+
+            <div class="row row-checkbox">
+              <input id="enable_dmi_filter" type="checkbox" v-model="smaParams.enable_dmi_filter" />
+              <label for="enable_dmi_filter" class="inline-label">Enable DMI Filter</label>
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content"
+                  >Enable the DMI filter for trend confirmation.</span
+                ></span
+              >
+            </div>
+            <div class="row">
+              <label for="dmi_length">DMI Length:</label>
+              <input
+                id="dmi_length"
+                type="number"
+                min="1"
+                step="1"
+                v-model.number="smaParams.dmi_length"
+              />
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content">Length of the DMI indicator.</span></span
+              >
+            </div>
+            <div class="row">
+              <label for="dmi_smoothing">DMI Smoothing Length:</label>
+              <input
+                id="dmi_smoothing"
+                type="number"
+                min="1"
+                step="1"
+                v-model.number="smaParams.dmi_smoothing"
+              />
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content">Smoothing length for the DMI indicator.</span></span
+              >
+            </div>
+            <div class="row">
+              <label for="dmi_threshold">DMI Threshold:</label>
+              <input
+                id="dmi_threshold"
+                type="number"
+                min="0"
+                step="0.1"
+                v-model.number="smaParams.dmi_threshold"
+              />
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content">Threshold value for the DMI filter.</span></span
+              >
+            </div>
+          </section>
         </fieldset>
 
         <!-- HØYRE: PROPERTIES -->
@@ -206,8 +323,7 @@
             <div class="row">
               <label for="strategy">Strategy:</label>
               <select id="strategy" v-model="selectedStrategy">
-                <option value="smaCross">SMA Crossover (Full)</option>
-                <option value="smaCrossMini">SMA Crossover (Mini)</option>
+                <option value="smaCross">SMA Crossover</option>
                 <option value="emaVwap">EMA/VWAP Advanced</option>
               </select>
             </div>
@@ -775,6 +891,9 @@ function signalLabel(ev: TradeEvent): string {
     sltrailing: 'SL Trailing',
     slcombined: 'SL Combined',
     tp: 'TP',
+    maxdrawdownclose: 'Max Drawdown Close',
+    maxconsecutivelossesclose: 'Max Consecutive Losses Close',
+    dmiweaktrendclose: 'DMI Weak Trend Close',
     // Entry/Exit
     reversal: 'Reversal',
     closeopposite: 'Close Opposite',
@@ -851,8 +970,7 @@ const emaVwapParams = reactive<EmaVwapParams>({
 })
 
 // Bruk useBacktest composable
-const { isLoading, runSmaCrossoverBacktest, runSmaCrossoverMiniBacktest, runEmaVwapBacktest } =
-  useBacktest()
+const { isLoading, runSmaCrossoverBacktest, runEmaVwapBacktest } = useBacktest()
 
 // --- Input variabler ---
 const symbol = ref('SOLUSDT')
@@ -876,7 +994,7 @@ const BINANCE_INTERVALS = [
   '1M',
 ] as const
 const timeframe = ref<(typeof BINANCE_INTERVALS)[number]>('1h')
-const selectedStrategy = ref<'smaCross' | 'smaCrossMini' | 'emaVwap'>('smaCrossMini')
+const selectedStrategy = ref<'smaCross' | 'emaVwap'>('smaCross')
 
 // `smaParams` inneholder nå ALLE parametere for BÅDE Full og Mini
 const smaParams = reactive<SmaParams>({
@@ -903,6 +1021,14 @@ const smaParams = reactive<SmaParams>({
 
   fashionably_late_mode: FashionablyLateMode.Atr,
   atr_threshold_fl: 1.3,
+  enable_max_drawdown: true,
+  max_drawdown_perc: 22.0,
+  enable_max_consecutive_losses: true,
+  max_consecutive_losses: 10,
+  enable_dmi_filter: true,
+  dmi_length: 6,
+  dmi_smoothing: 24,
+  dmi_threshold: 14.05,
 })
 
 // Aktiv RB? (gjelder nå for både Full og Mini)
@@ -970,9 +1096,7 @@ const runBacktest = async () => {
   else quoteCurrency.value = 'UNKNOWN' // Fallback hvis ingen match
 
   try {
-    const endTimeExclusive = endBeforeUtc.value
-      ? Date.parse(`${endBeforeUtc.value}Z`)
-      : undefined
+    const endTimeExclusive = endBeforeUtc.value ? Date.parse(`${endBeforeUtc.value}Z`) : undefined
     if (endTimeExclusive !== undefined && !Number.isFinite(endTimeExclusive)) {
       throw new Error('Invalid backtest end time.')
     }
@@ -999,16 +1123,6 @@ const runBacktest = async () => {
     // Kall riktig Rust-funksjon basert på valgt strategi
     if (selectedStrategy.value === 'smaCross') {
       results.value = await runSmaCrossoverBacktest({
-        symbol: symbol.value,
-        interval: timeframe.value,
-        limit: dataLimitForFetch.value,
-        endTimeExclusive,
-        initialCapital: initialCapital.value,
-        config: backtestConfig,
-        params: smaParams,
-      })
-    } else if (selectedStrategy.value === 'smaCrossMini') {
-      results.value = await runSmaCrossoverMiniBacktest({
         symbol: symbol.value,
         interval: timeframe.value,
         limit: dataLimitForFetch.value,
