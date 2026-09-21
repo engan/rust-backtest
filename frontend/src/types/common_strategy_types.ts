@@ -111,6 +111,7 @@ export interface SmaParams {
   risk_gearing: number,
   risk_perc: number;
   trade_direction: TradeDirectionFilter;
+  close_on_opposite?: boolean;
   parity_mode?: boolean;
   fashionably_late_mode: FashionablyLateMode,
   atr_threshold_fl: number,
@@ -167,32 +168,11 @@ export enum SlTpMethod {
   Combined = 'Combined',
 }
 
-export interface EmaVwapParams {
+export interface EmaVwapParams extends Omit<SmaParams, 'fast_period' | 'slow_period'> {
   ema_length: number;
   ema_source: EmaSource;
   vwap_anchor_period: VwapAnchorPeriod;
   vwap_source: EmaSource;
-  trade_direction: TradeDirectionFilter;
-  fashionably_late_mode: FashionablyLateMode;
-  atr_threshold_fl: number;
-  atr_length_pos: number;
-  risk_gearing: number;
-  risk_perc: number;
-  sl_tp_method: SlTpMethod;
-  reward_mult_rb: number;
-  atr_mult_rb: number;
-  fixed_sl_perc: number;
-  fixed_tp_perc: number;
-  trailing_sl_perc: number;
-  fixed_tp_for_trailing_perc: number;
-  enable_max_drawdown: boolean;
-  max_drawdown_perc: number;
-  enable_max_consecutive_losses: boolean;
-  max_consecutive_losses: number;
-  enable_dmi_filter: boolean;
-  dmi_length: number;
-  dmi_smoothing: number;
-  dmi_threshold: number;
 }
 
 // --- Typer for Frontend-spesifikk prosessering og visning ---

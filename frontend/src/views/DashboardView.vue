@@ -13,8 +13,8 @@
         <fieldset class="col-card">
           <legend>Inputs</legend>
 
-          <!-- SMA -->
-          <section class="group">
+          <!-- Strategy signal -->
+          <section v-if="selectedStrategy === 'smaCross'" class="group">
             <div class="group-title">SMA Crossover</div>
             <div class="row">
               <label for="sma_fast">Fast Period:</label>
@@ -26,13 +26,61 @@
             </div>
           </section>
 
+          <section v-else class="group">
+            <div class="group-title">Exponential Moving Averages</div>
+            <div class="row">
+              <label for="ema_length">EMA Length:</label>
+              <input
+                id="ema_length"
+                type="number"
+                min="1"
+                v-model.number="emaVwapParams.ema_length"
+              />
+              <span class="tip" tabindex="0"
+                >ⓘ<span class="tip-content">
+                  Length of the exponential moving average in chart bars. Default: 122.
+                </span></span
+              >
+            </div>
+            <div class="row">
+              <label for="ema_source">EMA Source:</label>
+              <select id="ema_source" v-model="emaVwapParams.ema_source">
+                <option v-for="source in Object.values(EmaSource)" :key="source" :value="source">
+                  {{ source }}
+                </option>
+              </select>
+            </div>
+
+            <div class="group-title subgroup-title">VWAP Settings</div>
+            <div class="row">
+              <label for="vwap_anchor">VWAP Anchor Period:</label>
+              <select id="vwap_anchor" v-model="emaVwapParams.vwap_anchor_period">
+                <option
+                  v-for="anchor in Object.values(VwapAnchorPeriod)"
+                  :key="anchor"
+                  :value="anchor"
+                >
+                  {{ anchor }}
+                </option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="vwap_source">VWAP Source:</label>
+              <select id="vwap_source" v-model="emaVwapParams.vwap_source">
+                <option v-for="source in Object.values(EmaSource)" :key="source" :value="source">
+                  {{ source }}
+                </option>
+              </select>
+            </div>
+          </section>
+
           <!-- Trading Direction -->
           <section class="group">
             <div class="group-title">Long and/or Short</div>
 
             <div class="row">
               <label for="sma_trade_dir">Trading Direction:</label>
-              <select id="sma_trade_dir" v-model="smaParams.trade_direction">
+              <select id="sma_trade_dir" v-model="activeParams.trade_direction">
                 <option :value="TradeDirectionFilter.Both">Both</option>
                 <option :value="TradeDirectionFilter.Long">Long</option>
                 <option :value="TradeDirectionFilter.Short">Short</option>
@@ -42,7 +90,7 @@
               <span class="tip" tabindex="0" style="margin-left: 6px">
                 ⓘ
                 <span class="tip-content">
-                  <b>Default: 'Both'.</b><br />
+                  <b>Default: {{ selectedStrategy === 'emaVwap' ? 'Long' : 'Both' }}.</b><br />
                   - <b>Both:</b> Allows both long and short trades<br />
                   - <b>Long:</b> Only long trades<br />
                   - <b>Short:</b> Only short trades
@@ -56,7 +104,7 @@
             <div class="group-title">Fashionably Late Trade</div>
             <div class="row">
               <label for="fl_mode">Fashionably Late Trade:</label>
-              <select id="fl_mode" v-model="smaParams.fashionably_late_mode">
+              <select id="fl_mode" v-model="activeParams.fashionably_late_mode">
                 <option :value="FashionablyLateMode.Off">Off</option>
                 <option :value="FashionablyLateMode.OnClose">On Close</option>
                 <option :value="FashionablyLateMode.OnHighLow">On High/Low</option>
@@ -77,14 +125,14 @@
                 id="fl_atr"
                 type="number"
                 step="0.1"
-                v-model.number="smaParams.atr_threshold_fl"
-                :disabled="isImproved && smaParams.atr_threshold_percent"
+                v-model.number="activeParams.atr_threshold_fl"
+                :disabled="isImproved && activeParams.atr_threshold_percent"
               />
             </div>
             <template v-if="isImproved">
               <div class="row">
                 <label for="atr_units">ATR threshold units:</label>
-                <select id="atr_units" v-model="smaParams.atr_threshold_percent">
+                <select id="atr_units" v-model="activeParams.atr_threshold_percent">
                   <option :value="false">Absolute (legacy)</option>
                   <option :value="true">Percent of price</option>
                 </select>
@@ -95,19 +143,19 @@
                   </span></span
                 >
               </div>
-              <div v-if="smaParams.atr_threshold_percent" class="row">
+              <div v-if="activeParams.atr_threshold_percent" class="row">
                 <label for="atr_percent">ATR Threshold (%):</label>
                 <input
                   id="atr_percent"
                   type="number"
                   min="0"
                   step="0.1"
-                  v-model.number="smaParams.atr_threshold_fl_percent"
+                  v-model.number="activeParams.atr_threshold_fl_percent"
                 />
               </div>
               <div class="row row-checkbox">
-                <input id="reset_fl" type="checkbox" v-model="smaParams.reset_fl_on_opposite" />
-                <label for="reset_fl" class="inline-label">Cancel FL on opposite SMA cross</label>
+                <input id="reset_fl" type="checkbox" v-model="activeParams.reset_fl_on_opposite" />
+                <label for="reset_fl" class="inline-label">Cancel FL on opposite crossover</label>
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content">
                     Cancels a pending breakout when the opposite cross occurs, including crosses
@@ -122,7 +170,7 @@
                   type="number"
                   min="0"
                   step="1"
-                  v-model.number="smaParams.fl_expiry_bars"
+                  v-model.number="activeParams.fl_expiry_bars"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content">
@@ -139,7 +187,7 @@
             <div class="group-title">Stop-Loss &amp; Take-Profit</div>
             <div class="row">
               <label for="sma_sl_tp_method">SL/TP Method:</label>
-              <select id="sma_sl_tp_method" v-model="smaParams.sl_tp_method">
+              <select id="sma_sl_tp_method" v-model="activeParams.sl_tp_method">
                 <option :value="SlTpMethod.RiskBased">RiskBased</option>
                 <option :value="SlTpMethod.FixedPercent">Fixed %</option>
                 <option :value="SlTpMethod.TrailingPercent">Trailing %</option>
@@ -148,14 +196,14 @@
             </div>
 
             <!-- RB parametre -->
-            <div v-if="smaParams.sl_tp_method === SlTpMethod.RiskBased" class="method-rows">
+            <div v-if="activeParams.sl_tp_method === SlTpMethod.RiskBased" class="method-rows">
               <div class="row">
                 <label for="sma_rr">Reward/Risk Ratio:</label>
                 <input
                   id="sma_rr"
                   type="number"
                   step="0.1"
-                  v-model.number="smaParams.reward_mult_rb"
+                  v-model.number="activeParams.reward_mult_rb"
                 />
               </div>
               <div class="row">
@@ -164,55 +212,55 @@
                   id="sma_atr_mult"
                   type="number"
                   step="0.1"
-                  v-model.number="smaParams.atr_mult_rb"
+                  v-model.number="activeParams.atr_mult_rb"
                 />
               </div>
             </div>
 
             <!-- Fixed -->
-            <div v-if="smaParams.sl_tp_method === SlTpMethod.FixedPercent" class="method-rows">
+            <div v-if="activeParams.sl_tp_method === SlTpMethod.FixedPercent" class="method-rows">
               <div class="row">
                 <label>Fixed SL %:</label
-                ><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc" />
+                ><input type="number" step="0.1" v-model.number="activeParams.fixed_sl_perc" />
               </div>
               <div class="row">
                 <label>Fixed TP %:</label
-                ><input type="number" step="0.1" v-model.number="smaParams.fixed_tp_perc" />
+                ><input type="number" step="0.1" v-model.number="activeParams.fixed_tp_perc" />
               </div>
             </div>
 
             <!-- Trailing -->
-            <div v-if="smaParams.sl_tp_method === SlTpMethod.TrailingPercent" class="method-rows">
+            <div v-if="activeParams.sl_tp_method === SlTpMethod.TrailingPercent" class="method-rows">
               <div class="row">
                 <label>Trailing SL %:</label
-                ><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc" />
+                ><input type="number" step="0.1" v-model.number="activeParams.trailing_sl_perc" />
               </div>
               <div class="row">
                 <label>Static TP %:</label
                 ><input
                   type="number"
                   step="0.1"
-                  v-model.number="smaParams.fixed_tp_for_trailing_perc"
+                  v-model.number="activeParams.fixed_tp_for_trailing_perc"
                 />
               </div>
             </div>
 
             <!-- Combined -->
-            <div v-if="smaParams.sl_tp_method === SlTpMethod.Combined" class="method-rows">
+            <div v-if="activeParams.sl_tp_method === SlTpMethod.Combined" class="method-rows">
               <div class="row">
                 <label>Fixed SL %:</label
-                ><input type="number" step="0.1" v-model.number="smaParams.fixed_sl_perc" />
+                ><input type="number" step="0.1" v-model.number="activeParams.fixed_sl_perc" />
               </div>
               <div class="row">
                 <label>Trailing SL %:</label
-                ><input type="number" step="0.1" v-model.number="smaParams.trailing_sl_perc" />
+                ><input type="number" step="0.1" v-model.number="activeParams.trailing_sl_perc" />
               </div>
               <div class="row">
                 <label>Static TP %:</label
                 ><input
                   type="number"
                   step="0.1"
-                  v-model.number="smaParams.fixed_tp_for_trailing_perc"
+                  v-model.number="activeParams.fixed_tp_for_trailing_perc"
                 />
               </div>
             </div>
@@ -225,13 +273,13 @@
             <!-- Kun for Risk-Based -->
             <div class="row">
               <label for="sma_atr_len">ATR Length:</label>
-              <input id="sma_atr_len" type="number" v-model.number="smaParams.atr_length" />
+              <input id="sma_atr_len" type="number" v-model.number="activeParams.atr_length" />
             </div>
 
             <!-- Alltid synlig -->
             <div class="row">
               <label for="sma_risk_gearing">Risk Gearing (x):</label>
-              <select id="sma_risk_gearing" v-model.number="smaParams.risk_gearing">
+              <select id="sma_risk_gearing" v-model.number="activeParams.risk_gearing">
                 <option v-for="n in [1, 2, 3, 4, 5]" :key="n" :value="n">{{ n }}</option>
               </select>
             </div>
@@ -243,7 +291,7 @@
                 id="sma_risk_perc"
                 type="number"
                 step="0.1"
-                v-model.number="smaParams.risk_perc"
+                v-model.number="activeParams.risk_perc"
               />
             </div>
           </section>
@@ -255,7 +303,7 @@
                 <input
                   id="enable_max_drawdown"
                   type="checkbox"
-                  v-model="smaParams.enable_max_drawdown"
+                  v-model="activeParams.enable_max_drawdown"
                 />
                 <label for="enable_max_drawdown" class="inline-label">
                   Enable Maximum Drawdown Control
@@ -275,7 +323,7 @@
                   type="number"
                   min="0"
                   step="0.1"
-                  v-model.number="smaParams.max_drawdown_perc"
+                  v-model.number="activeParams.max_drawdown_perc"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content"
@@ -288,7 +336,7 @@
                 <input
                   id="enable_max_consecutive_losses"
                   type="checkbox"
-                  v-model="smaParams.enable_max_consecutive_losses"
+                  v-model="activeParams.enable_max_consecutive_losses"
                 />
                 <label for="enable_max_consecutive_losses" class="inline-label">
                   Enable Maximum Consecutive Losses Control
@@ -307,7 +355,7 @@
                   type="number"
                   min="1"
                   step="1"
-                  v-model.number="smaParams.max_consecutive_losses"
+                  v-model.number="activeParams.max_consecutive_losses"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content"
@@ -323,7 +371,7 @@
                   type="number"
                   min="1"
                   step="1"
-                  v-model.number="smaParams.cooldown_bars"
+                  v-model.number="activeParams.cooldown_bars"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content">
@@ -339,7 +387,7 @@
                 <input
                   id="enable_dmi_filter"
                   type="checkbox"
-                  v-model="smaParams.enable_dmi_filter"
+                  v-model="activeParams.enable_dmi_filter"
                 />
                 <label for="enable_dmi_filter" class="inline-label"
                   >Enable ADX trend-strength filter</label
@@ -358,7 +406,7 @@
                   type="number"
                   min="1"
                   step="1"
-                  v-model.number="smaParams.dmi_length"
+                  v-model.number="activeParams.dmi_length"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content">Length of the DMI indicator.</span></span
@@ -371,7 +419,7 @@
                   type="number"
                   min="1"
                   step="1"
-                  v-model.number="smaParams.dmi_smoothing"
+                  v-model.number="activeParams.dmi_smoothing"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content">Smoothing length for the DMI indicator.</span></span
@@ -384,7 +432,7 @@
                   type="number"
                   min="0"
                   step="0.1"
-                  v-model.number="smaParams.dmi_threshold"
+                  v-model.number="activeParams.dmi_threshold"
                 />
                 <span class="tip" tabindex="0"
                   >ⓘ<span class="tip-content">Threshold value for the DMI filter.</span></span
@@ -399,7 +447,7 @@
                     min="0"
                     max="100"
                     step="0.05"
-                    v-model.number="smaParams.adx_resume_threshold"
+                    v-model.number="activeParams.adx_resume_threshold"
                   />
                 </div>
                 <div class="row">
@@ -409,7 +457,7 @@
                     type="number"
                     min="1"
                     step="1"
-                    v-model.number="smaParams.adx_resume_bars"
+                    v-model.number="activeParams.adx_resume_bars"
                   />
                   <span class="tip" tabindex="0"
                     >ⓘ<span class="tip-content">
@@ -433,7 +481,7 @@
               <label for="strategy">Strategy:</label>
               <select id="strategy" v-model="selectedStrategy">
                 <option value="smaCross">SMA Crossover</option>
-                <option value="emaVwap">EMA/VWAP Advanced</option>
+                <option value="emaVwap">EMA/VWAP</option>
               </select>
             </div>
           </section>
@@ -448,7 +496,7 @@
                 type="checkbox"
                 v-model="priceToTick"
                 class="accent-blue-500"
-                :disabled="smaParams.parity_mode"
+                :disabled="activeParams.parity_mode"
               />
               <label for="priceToTick" class="inline-label"> Round prices to exchange tick </label>
 
@@ -470,7 +518,7 @@
               <input
                 id="parityMode"
                 type="checkbox"
-                v-model="smaParams.parity_mode"
+                v-model="activeParams.parity_mode"
                 class="accent-blue-500"
               />
               <label for="parityMode" class="inline-label">Match TradingView (Parity)</label>
@@ -563,11 +611,11 @@
               <input
                 id="order-size-value"
                 type="number"
-                v-model.number="smaParams.order_size_value"
+                v-model.number="activeParams.order_size_value"
                 :disabled="disableOrderSizeValue"
               />
               <select
-                v-model="smaParams.order_size_mode"
+                v-model="activeParams.order_size_mode"
                 :disabled="isRiskBased"
                 style="margin-left: 8px"
               >
@@ -1060,29 +1108,40 @@ const formatDateTime = (ts: number | null | undefined): string => {
    2.  REAKTIVE DATA
 --------------------------------------------------------------------*/
 const emaVwapParams = reactive<EmaVwapParams>({
-  // Fyll inn med fornuftige default-verdier som matcher Pine Script
-  ema_length: 120,
-  ema_source: EmaSource.Close,
+  behavior_mode: 'Improved',
+  atr_threshold_percent: false,
+  atr_threshold_fl_percent: 1.0,
+  reset_fl_on_opposite: true,
+  fl_expiry_bars: 48,
+  cooldown_bars: 48,
+  adx_resume_threshold: 16.0,
+  adx_resume_bars: 3,
+  ema_length: 122,
+  ema_source: EmaSource.High,
   vwap_anchor_period: VwapAnchorPeriod.Week,
-  vwap_source: EmaSource.HLC3,
-  trade_direction: TradeDirectionFilter.Both,
-  fashionably_late_mode: FashionablyLateMode.Off,
-  atr_threshold_fl: 1.0,
-  atr_length_pos: 14,
+  vwap_source: EmaSource.Open,
+  order_size_mode: OrderSizeMode.PercentOfEquity,
+  order_size_value: 100,
+  trade_direction: TradeDirectionFilter.Long,
+  close_on_opposite: true,
+  parity_mode: true,
+  fashionably_late_mode: FashionablyLateMode.Atr,
+  atr_threshold_fl: 1.3,
+  atr_length: 14,
   risk_gearing: 1,
   risk_perc: 1,
-  sl_tp_method: SlTpMethod.FixedPercent,
-  reward_mult_rb: 1.0,
-  atr_mult_rb: 1.0,
+  sl_tp_method: SlTpMethod.TrailingPercent,
+  reward_mult_rb: 2.0,
+  atr_mult_rb: 1.5,
   fixed_sl_perc: 1.0,
-  fixed_tp_perc: 1.0,
-  trailing_sl_perc: 1.0,
-  fixed_tp_for_trailing_perc: 1.0,
-  enable_max_drawdown: false,
-  max_drawdown_perc: 50.0,
-  enable_max_consecutive_losses: false,
-  max_consecutive_losses: 20,
-  enable_dmi_filter: false,
+  fixed_tp_perc: 2.0,
+  trailing_sl_perc: 3.0,
+  fixed_tp_for_trailing_perc: 5.0,
+  enable_max_drawdown: true,
+  max_drawdown_perc: 22.0,
+  enable_max_consecutive_losses: true,
+  max_consecutive_losses: 5,
+  enable_dmi_filter: true,
   dmi_length: 6,
   dmi_smoothing: 24,
   dmi_threshold: 14.05,
@@ -1158,9 +1217,12 @@ const smaParams = reactive<SmaParams>({
   dmi_threshold: 14.05,
 })
 
-// Aktiv RB? (gjelder nå for både Full og Mini)
-const isRiskBased = computed(() => smaParams.sl_tp_method === SlTpMethod.RiskBased)
-const isImproved = computed(() => smaParams.behavior_mode === 'Improved')
+const activeParams = computed(() =>
+  selectedStrategy.value === 'emaVwap' ? emaVwapParams : smaParams,
+)
+
+const isRiskBased = computed(() => activeParams.value.sl_tp_method === SlTpMethod.RiskBased)
+const isImproved = computed(() => activeParams.value.behavior_mode === 'Improved')
 
 // Order Size-verdi er inaktiv når Risk-Based styrer sizing
 const disableOrderSizeValue = computed(() => isRiskBased.value)
@@ -1216,7 +1278,6 @@ function clearPreset() {
 const runBacktest = async () => {
   results.value = null // Nullstill gamle resultater
   resultBehavior.value = ''
-  const runParams = { ...smaParams }
   isLoading.value = true
 
   // Bestem quoteCurrency basert på symbol
@@ -1253,6 +1314,7 @@ const runBacktest = async () => {
     }
     // Kall riktig Rust-funksjon basert på valgt strategi
     if (selectedStrategy.value === 'smaCross') {
+      const runParams = { ...smaParams }
       results.value = await runSmaCrossoverBacktest({
         symbol: symbol.value,
         interval: timeframe.value,
@@ -1268,7 +1330,7 @@ const runBacktest = async () => {
           ? 'Legacy safeguards'
           : (runParams.behavior_mode ?? 'Legacy safeguards')
     } else if (selectedStrategy.value === 'emaVwap') {
-      // VIKTIG: Denne er nå helt lik SMA-kallet, men sender 'params'
+      const runParams = { ...emaVwapParams }
       results.value = await runEmaVwapBacktest({
         symbol: symbol.value,
         interval: timeframe.value,
@@ -1276,8 +1338,10 @@ const runBacktest = async () => {
         endTimeExclusive,
         initialCapital: initialCapital.value,
         config: backtestConfig,
-        params: emaVwapParams, // Send hele det reaktive objektet
+        params: runParams,
+        priceToTick: priceToTick.value,
       })
+      resultBehavior.value = runParams.behavior_mode ?? 'Improved'
     }
   } catch (error) {
     console.error('Failed to run backtest:', error)

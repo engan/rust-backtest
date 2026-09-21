@@ -92,6 +92,7 @@ export function useBacktest() {
     initialCapital: number;
     config: BacktestConfig;
     params: EmaVwapParams;
+    priceToTick: boolean;
   }): Promise<BacktestResult> => {
     isLoading.value = true;
     try {
@@ -101,11 +102,18 @@ export function useBacktest() {
       if (error.value) throw new Error(error.value);
       if (!klines.value.length) throw new Error('No klines returned from API.');
 
-      return wasmInst.run_ema_vwap_strategy(
+      const flags: RoundingFlags = {
+        price_to_tick: opt.priceToTick,
+        quantity_step: false,
+        sl_tp_tick: false,
+      };
+
+      return wasmInst.run_ema_vwap_backtest(
         klines.value,
         opt.config,
         opt.initialCapital,
         opt.params,
+        flags,
       ) as BacktestResult;
     } finally {
       isLoading.value = false;
