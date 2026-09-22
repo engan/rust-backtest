@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import FieldTooltip from '@/components/FieldTooltip.vue'
 
 type Distribution = {
   minimum: number
@@ -194,6 +195,7 @@ onMounted(() => {
                 <option>Bootstrap</option>
                 <option>Block bootstrap</option>
               </select>
+              <FieldTooltip label="Sampling mode" text="Shuffle reorders trades once, Bootstrap samples individual trades with replacement, and Block bootstrap preserves short trade sequences." />
             </div>
             <div class="research-field">
               <label for="simulation-count">Simulations</label>
@@ -204,10 +206,12 @@ onMounted(() => {
                 min="100"
                 step="1000"
               />
+              <FieldTooltip label="Simulations" text="Number of alternative equity paths generated. More paths improve tail estimates but require more processing time." />
             </div>
             <div class="research-field">
               <label for="block-size">Block size</label>
               <input id="block-size" v-model.number="settings.blockSize" type="number" min="1" />
+              <FieldTooltip label="Block size" text="Number of consecutive trades sampled together in Block bootstrap mode to retain short-term dependence." />
             </div>
             <div class="research-field">
               <label for="skip-probability">Skip probability %</label>
@@ -218,6 +222,7 @@ onMounted(() => {
                 min="0"
                 max="100"
               />
+              <FieldTooltip label="Skip probability" text="Probability that a sampled trade is omitted, modeling missed entries or unavailable execution." />
             </div>
             <div class="research-field">
               <label for="pnl-jitter">P&amp;L jitter</label>
@@ -228,6 +233,7 @@ onMounted(() => {
                 min="0"
                 step="0.05"
               />
+              <FieldTooltip label="P&amp;L jitter" text="Random variation applied to each sampled trade result to test sensitivity to imperfect fills and outcome noise." />
             </div>
             <div class="research-field">
               <label for="extra-cost">Extra cost / trade</label>
@@ -238,6 +244,7 @@ onMounted(() => {
                 min="0"
                 step="0.01"
               />
+              <FieldTooltip label="Extra cost per trade" text="Additional quote-currency cost deducted from every simulated trade beyond the backtest costs." />
             </div>
             <div class="research-field">
               <label for="ruin-threshold">Ruin threshold %</label>
@@ -248,10 +255,12 @@ onMounted(() => {
                 min="1"
                 max="100"
               />
+              <FieldTooltip label="Ruin threshold" text="Drawdown percentage treated as account ruin when calculating probability of ruin." />
             </div>
             <div class="research-field">
               <label for="simulation-seed">Seed</label>
               <input id="simulation-seed" v-model.number="settings.seed" type="number" min="0" />
+              <FieldTooltip label="Seed" text="Initial random seed. Reusing the same seed and settings reproduces the same simulation paths." />
             </div>
             <button class="research-primary" type="button" @click="prepareRun">
               Run Monte Carlo

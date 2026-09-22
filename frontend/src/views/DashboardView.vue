@@ -11,6 +11,7 @@
           <span>{{ activeParams.parity_mode ? '✓' : '○' }}</span>
           TradingView parity
         </label>
+        <FieldTooltip label="TradingView parity" text="Uses the execution and rounding behavior required to reproduce TradingView strategy results as closely as possible." />
         <button
           class="backtest-run-button"
           type="button"
@@ -33,24 +34,29 @@
                 <option value="smaCross">SMA Crossover</option>
                 <option value="emaVwap">EMA / VWAP</option>
               </select>
+              <FieldTooltip label="Strategy" text="Selects the trading rules used for signal generation. Each strategy keeps its own parameter set." />
             </div>
             <div class="research-field">
               <label for="symbol">Symbol</label>
               <input id="symbol" v-model="symbol" type="text" />
+              <FieldTooltip label="Symbol" text="The Binance market to download and backtest, for example SOLUSDT." />
             </div>
             <div class="research-field">
               <label for="timeframe">Timeframe</label>
               <select id="timeframe" v-model="timeframe">
                 <option v-for="iv in BINANCE_INTERVALS" :key="iv" :value="iv">{{ iv }}</option>
               </select>
+              <FieldTooltip label="Timeframe" text="Candle interval used by the strategy. Time-based settings measured in bars change their real-world duration with this value." />
             </div>
             <div class="research-field">
               <label for="limit">Dataset</label>
               <input id="limit" v-model.number="dataLimitForFetch" type="number" min="1" />
+              <FieldTooltip label="Dataset" text="Maximum number of historical candles requested for this run. Larger datasets take longer but cover more market regimes." />
             </div>
             <div class="research-field">
               <label for="end-before">End before (UTC)</label>
               <input id="end-before" v-model="endBeforeUtc" type="datetime-local" />
+              <FieldTooltip label="End before" text="Exclusive UTC cutoff for the newest candle. Leave empty to use the latest available market data." />
             </div>
             <div class="research-field">
               <label for="trade-direction">Trading direction</label>
@@ -59,11 +65,13 @@
                 <option :value="TradeDirectionFilter.Long">Long</option>
                 <option :value="TradeDirectionFilter.Short">Short</option>
               </select>
+              <FieldTooltip label="Trading direction" text="Allows long trades, short trades, or both. Signals in disabled directions are ignored." />
             </div>
 
             <div v-if="presetEnabled" class="preset-card-row">
               <label for="tvpreset">TradingView preset JSON</label>
               <textarea id="tvpreset" rows="3" @paste.prevent="onPastePreset($event)" />
+              <FieldTooltip label="TradingView preset JSON" text="Paste a saved TradingView-compatible parameter preset to populate matching strategy settings." />
               <div class="research-button-row">
                 <button class="research-secondary" type="button" @click="showPreset">
                   Show preset
@@ -83,10 +91,12 @@
               <div class="research-field">
                 <label for="sma_fast">Fast SMA period</label>
                 <input id="sma_fast" v-model.number="smaParams.fast_period" type="number" min="1" />
+                <FieldTooltip label="Fast SMA period" text="Number of candles in the responsive moving average. Lower values react faster to price changes." />
               </div>
               <div class="research-field">
                 <label for="sma_slow">Slow SMA period</label>
                 <input id="sma_slow" v-model.number="smaParams.slow_period" type="number" min="1" />
+                <FieldTooltip label="Slow SMA period" text="Number of candles in the slower trend average. Crosses against the fast SMA create the base signals." />
               </div>
             </template>
 
@@ -99,6 +109,7 @@
                   type="number"
                   min="1"
                 />
+                <FieldTooltip label="EMA length" text="Number of candles used by the exponential moving average. Higher values produce a slower trend filter." />
               </div>
               <div class="research-field">
                 <label for="ema_source">EMA source</label>
@@ -107,6 +118,7 @@
                     {{ source }}
                   </option>
                 </select>
+                <FieldTooltip label="EMA source" text="Price series used to calculate the EMA, such as close, high, low, or open." />
               </div>
               <div class="research-field">
                 <label for="vwap_anchor">VWAP anchor</label>
@@ -119,6 +131,7 @@
                     {{ anchor }}
                   </option>
                 </select>
+                <FieldTooltip label="VWAP anchor" text="Period at which VWAP accumulation resets. Weekly anchoring starts a new VWAP each week." />
               </div>
               <div class="research-field">
                 <label for="vwap_source">VWAP source</label>
@@ -127,6 +140,7 @@
                     {{ source }}
                   </option>
                 </select>
+                <FieldTooltip label="VWAP source" text="Price series accumulated by the anchored VWAP calculation." />
               </div>
             </template>
 
@@ -140,6 +154,7 @@
                 <option :value="FashionablyLateMode.OnHighLow">On High / Low</option>
                 <option :value="FashionablyLateMode.Atr">ATR</option>
               </select>
+              <FieldTooltip label="Fashionably Late" text="Controls delayed entries after an initial crossover. ATR mode waits for price to return within the configured volatility threshold." />
             </div>
             <div v-if="isImproved" class="research-field">
               <label for="atr_units">ATR threshold units</label>
@@ -147,6 +162,7 @@
                 <option :value="false">Absolute</option>
                 <option :value="true">Percent of price</option>
               </select>
+              <FieldTooltip label="ATR threshold units" text="Uses either an absolute price distance or a percentage of price for the Fashionably Late ATR threshold." />
             </div>
             <div class="research-field">
               <label :for="activeParams.atr_threshold_percent ? 'atr_percent' : 'fl_atr'"
@@ -168,11 +184,15 @@
                 min="0"
                 step="0.1"
               />
+              <FieldTooltip label="ATR threshold" text="Maximum allowed distance for an ATR-delayed entry. The unit is selected in the field above." />
             </div>
-            <label v-if="isImproved" class="backtest-check-row" for="reset_fl">
-              <input id="reset_fl" v-model="activeParams.reset_fl_on_opposite" type="checkbox" />
-              <span>Cancel on opposite cross</span>
-            </label>
+            <div v-if="isImproved" class="research-option-row">
+              <label class="backtest-check-row" for="reset_fl">
+                <input id="reset_fl" v-model="activeParams.reset_fl_on_opposite" type="checkbox" />
+                <span>Cancel on opposite cross</span>
+              </label>
+              <FieldTooltip label="Cancel on opposite cross" text="Cancels an armed delayed entry if the moving averages cross in the opposite direction before entry." />
+            </div>
             <div v-if="isImproved" class="research-field">
               <label for="fl_expiry">Maximum wait</label>
               <div class="field-with-unit">
@@ -185,6 +205,7 @@
                 />
                 <span>bars</span>
               </div>
+              <FieldTooltip label="Maximum wait" text="Maximum number of candles a delayed entry can remain armed. Zero means no time limit." />
             </div>
           </div>
         </section>
@@ -202,6 +223,7 @@
                 <option :value="SlTpMethod.TrailingPercent">Trailing %</option>
                 <option :value="SlTpMethod.Combined">Combined</option>
               </select>
+              <FieldTooltip label="SL/TP method" text="Chooses how stop-loss and take-profit levels are calculated for each trade." />
             </div>
 
             <template v-if="activeParams.sl_tp_method === SlTpMethod.RiskBased">
@@ -213,6 +235,7 @@
                   type="number"
                   step="0.1"
                 />
+                <FieldTooltip label="Reward / risk" text="Take-profit distance as a multiple of the initial stop distance in RiskBased mode." />
               </div>
               <div class="research-field">
                 <label for="atr-multiplier">ATR multiplier SL</label>
@@ -222,6 +245,7 @@
                   type="number"
                   step="0.1"
                 />
+                <FieldTooltip label="ATR multiplier SL" text="Multiplies ATR to set the initial stop distance in RiskBased mode." />
               </div>
             </template>
 
@@ -236,6 +260,7 @@
                     step="0.1"
                   /><span>%</span>
                 </div>
+                <FieldTooltip label="Fixed SL" text="Fixed percentage distance from entry to the stop-loss." />
               </div>
               <div class="research-field">
                 <label for="fixed-tp">Fixed TP</label>
@@ -247,6 +272,7 @@
                     step="0.1"
                   /><span>%</span>
                 </div>
+                <FieldTooltip label="Fixed TP" text="Fixed percentage distance from entry to the take-profit target." />
               </div>
             </template>
 
@@ -266,6 +292,7 @@
                     step="0.1"
                   /><span>%</span>
                 </div>
+                <FieldTooltip label="Fixed SL" text="Fixed protective stop used together with the trailing exit in Combined mode." />
               </div>
               <div class="research-field">
                 <label for="trailing-sl">Trailing SL</label>
@@ -277,6 +304,7 @@
                     step="0.1"
                   /><span>%</span>
                 </div>
+                <FieldTooltip label="Trailing SL" text="Percentage trailing distance from the most favorable price reached after entry." />
               </div>
               <div class="research-field">
                 <label for="static-tp">Static TP</label>
@@ -288,6 +316,7 @@
                     step="0.1"
                   /><span>%</span>
                 </div>
+                <FieldTooltip label="Static TP" text="Fixed take-profit percentage used with Trailing or Combined exit modes." />
               </div>
             </template>
 
@@ -301,12 +330,14 @@
                 type="number"
                 min="1"
               />
+              <FieldTooltip label="ATR length" text="Number of candles used for Average True Range calculations in entry, risk, and sizing logic." />
             </div>
             <div class="research-field">
               <label for="risk-gearing">Position gearing</label>
               <select id="risk-gearing" v-model.number="activeParams.risk_gearing">
                 <option v-for="n in [1, 2, 3, 4, 5]" :key="n" :value="n">{{ n }}×</option>
               </select>
+              <FieldTooltip label="Position gearing" text="Multiplies the calculated position exposure. Higher gearing increases both profit and loss sensitivity." />
             </div>
             <div v-if="isRiskBased" class="research-field">
               <label for="risk-percent">Risk per trade</label>
@@ -319,6 +350,7 @@
                   step="0.1"
                 /><span>%</span>
               </div>
+              <FieldTooltip label="Risk per trade" text="Percentage of current equity risked at the initial stop when RiskBased sizing is active." />
             </div>
             <div class="research-field">
               <label for="order-size-value">Order size</label>
@@ -339,6 +371,7 @@
                   <option :value="OrderSizeMode.FixedValue">USDT</option>
                 </select>
               </div>
+              <FieldTooltip label="Order size" text="Controls position size as percent of equity, fixed quantity, or fixed quote-currency value. RiskBased mode calculates this automatically." />
             </div>
             <div class="research-field">
               <label for="initial-capital">Initial capital</label>
@@ -350,6 +383,7 @@
                   min="0"
                 /><span>USDT</span>
               </div>
+              <FieldTooltip label="Initial capital" text="Starting account equity used for returns, drawdown, and position sizing." />
             </div>
           </div>
         </section>
@@ -375,6 +409,7 @@
                   aria-label="Maximum drawdown percent"
                 /><span>%</span>
               </div>
+              <FieldTooltip label="Maximum drawdown" text="Pauses new entries when equity drawdown reaches this percentage. Improved mode can resume after recovery and cooldown conditions are satisfied." />
             </div>
             <div class="safeguard-line">
               <label class="backtest-check-row" for="enable_max_losses">
@@ -392,6 +427,7 @@
                 min="1"
                 aria-label="Maximum consecutive losses"
               />
+              <FieldTooltip label="Consecutive losses" text="Pauses new entries after this many completed losing trades in a row." />
             </div>
             <div v-if="isImproved" class="research-field">
               <label for="cooldown-bars">Cooldown</label>
@@ -403,16 +439,20 @@
                   min="1"
                 /><span>bars</span>
               </div>
+              <FieldTooltip label="Cooldown" text="Minimum number of candles to wait after a safeguard pause before the strategy may resume." />
             </div>
             <div class="research-divider" />
-            <label class="backtest-check-row" for="enable_dmi_filter">
-              <input
-                id="enable_dmi_filter"
-                v-model="activeParams.enable_dmi_filter"
-                type="checkbox"
-              />
-              <span>ADX trend-strength filter</span>
-            </label>
+            <div class="research-option-row">
+              <label class="backtest-check-row" for="enable_dmi_filter">
+                <input
+                  id="enable_dmi_filter"
+                  v-model="activeParams.enable_dmi_filter"
+                  type="checkbox"
+                />
+                <span>ADX trend-strength filter</span>
+              </label>
+              <FieldTooltip label="ADX trend-strength filter" text="Pauses entries in weak-trend conditions and resumes only after ADX reaches the recovery threshold for the required confirmation period." />
+            </div>
             <div class="research-field">
               <label for="dmi-length">DMI length</label>
               <input
@@ -421,6 +461,7 @@
                 type="number"
                 min="1"
               />
+              <FieldTooltip label="DMI length" text="Lookback length used to calculate directional movement before ADX smoothing." />
             </div>
             <div class="research-field">
               <label for="dmi-smoothing">ADX smoothing</label>
@@ -430,6 +471,7 @@
                 type="number"
                 min="1"
               />
+              <FieldTooltip label="ADX smoothing" text="Smoothing length used for the ADX trend-strength value." />
             </div>
             <div class="research-field">
               <label for="dmi-threshold">ADX pause below</label>
@@ -440,6 +482,7 @@
                 min="0"
                 step="0.05"
               />
+              <FieldTooltip label="ADX pause below" text="Pauses new entries when ADX falls below this trend-strength level." />
             </div>
             <template v-if="isImproved">
               <div class="research-field">
@@ -451,6 +494,7 @@
                   min="0"
                   step="0.05"
                 />
+                <FieldTooltip label="ADX resume at" text="ADX must reach or exceed this value before recovery confirmation can begin." />
               </div>
               <div class="research-field">
                 <label for="adx-confirmation">Confirmation</label>
@@ -462,6 +506,7 @@
                     min="1"
                   /><span>bars</span>
                 </div>
+                <FieldTooltip label="Confirmation" text="Number of consecutive candles ADX must remain at or above the resume threshold before entries restart." />
               </div>
             </template>
           </div>
@@ -481,24 +526,29 @@
                   step="0.01"
                 /><span>%</span>
               </div>
+              <FieldTooltip label="Commission" text="Broker fee charged on both entry and exit, expressed as a percentage of transaction value." />
             </div>
             <div class="research-field">
               <label for="slippage">Slippage</label>
               <div class="field-with-unit">
                 <input id="slippage" v-model.number="slippageTicks" type="number" min="0" /><span
-                  >ticks</span
+                >ticks</span
                 >
               </div>
+              <FieldTooltip label="Slippage" text="Adverse execution adjustment in exchange ticks applied to simulated fills." />
             </div>
-            <label class="backtest-check-row" for="priceToTick">
-              <input
-                id="priceToTick"
-                v-model="priceToTick"
-                type="checkbox"
-                :disabled="activeParams.parity_mode"
-              />
-              <span>Round to exchange tick</span>
-            </label>
+            <div class="research-option-row">
+              <label class="backtest-check-row" for="priceToTick">
+                <input
+                  id="priceToTick"
+                  v-model="priceToTick"
+                  type="checkbox"
+                  :disabled="activeParams.parity_mode"
+                />
+                <span>Round to exchange tick</span>
+              </label>
+              <FieldTooltip label="Round to exchange tick" text="Rounds simulated order prices to the market tick size. It is disabled while TradingView parity mode is active." />
+            </div>
           </div>
         </section>
       </div>
@@ -596,10 +646,10 @@
                     {{ formatPositionValue(trade.positionValue) }}
                   </td>
                   <td :class="(trade.exit?.pnl ?? trade.entry.pnl ?? 0) >= 0 ? 'profit' : 'loss'">
-                    {{ (trade.exit?.pnl ?? trade.entry.pnl ?? 0).toFixed(2) }} {{ quoteCurrency }}
+                    {{ signed2(trade.exit?.pnl ?? trade.entry.pnl ?? 0) }} {{ quoteCurrency }}
                   </td>
                   <td :class="(trade.pnlPercent ?? 0) >= 0 ? 'profit' : 'loss'">
-                    {{ tvFmt2(trade.pnlPercent) }}%
+                    {{ signedPercent2(trade.pnlPercent) }}
                   </td>
                 </tr>
               </tbody>
@@ -692,14 +742,14 @@
                       class="two-line-value"
                       :class="(trade.exit.pnl ?? 0) >= 0 ? 'profit' : 'loss'"
                     >
-                      <strong>{{ (trade.exit.pnl ?? 0).toFixed(2) }} {{ quoteCurrency }}</strong>
-                      <small>{{ tvFmt2(trade.pnlPercent) }}%</small>
+                      <strong>{{ signed2(trade.exit.pnl ?? 0) }} {{ quoteCurrency }}</strong>
+                      <small>{{ signedPercent2(trade.pnlPercent) }}</small>
                     </td>
                     <td
                       rowspan="2"
                       :class="(trade.pnlPercent ?? 0) >= 0 ? 'profit' : 'loss'"
                     >
-                      {{ tvFmt2(trade.pnlPercent) }}%
+                      {{ signedPercent2(trade.pnlPercent) }}
                     </td>
                     <td rowspan="2">{{ trade.commission?.toFixed(2) }} {{ quoteCurrency }}</td>
                     <td rowspan="2" class="two-line-value">
@@ -758,6 +808,7 @@ import { ref, computed, reactive } from 'vue'
 import { useBacktest } from '@/composables/useBacktest'
 import { fetchSymbolFilters } from '@/services/binanceAPI'
 import PnlChart from '@/components/PnlChart.vue'
+import FieldTooltip from '@/components/FieldTooltip.vue'
 import { loadPreset, savePreset, parsePreset, type TvPreset } from '@/services/tvPreset.ts'
 
 // Importer ENUMs (verdier)
@@ -820,6 +871,12 @@ const tvFmt2 = (x?: number) => {
   if (x === undefined || x === null || !isFinite(x)) return '0.00'
   const safe = Math.abs(x) < 0.005 ? 0 : x // unngå "-0.00"
   return roundN(safe, 2).toFixed(2)
+}
+
+const signed2 = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`
+const signedPercent2 = (x?: number) => {
+  const safe = x === undefined || x === null || !isFinite(x) || Math.abs(x) < 0.005 ? 0 : x
+  return `${safe >= 0 ? '+' : ''}${tvFmt2(safe)}%`
 }
 
 // Keep up to two decimals after scaling, e.g. 11.76 K or 5.9 K.
@@ -1765,45 +1822,6 @@ tr > td:nth-child(4)  /* Date/Time */ {
   opacity: 0.86; /* Litt svakere for bedre lesbarhet */
 }
 
-.tip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 6px;
-  border-radius: 50%;
-  background: #555;
-  color: #fff;
-  font-size: 16px;
-  cursor: help;
-  outline: none;
-}
-.tip-content {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 130%;
-  min-width: 590px;
-  max-width: 590px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: #111;
-  color: #eee;
-  border: 1px solid #444;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-  z-index: 10;
-  white-space: normal;
-}
-.tip:hover .tip-content,
-.tip:focus .tip-content {
-  opacity: 1;
-}
-
 .trade-id {
   color: #bbb;
   font-weight: 500;
@@ -1817,15 +1835,13 @@ tr > td:nth-child(4)  /* Date/Time */ {
 }
 
 .dir-long {
-  /* blå som TV */
-  color: #3b82f6; /* ~Tailwind blue-500 */
-  opacity: 0.86; /* Litt svakere for bedre lesbarhet */
+  color: #3ce6a0;
+  opacity: 0.96;
 }
 
 .dir-short {
-  /* rød som TV */
-  color: #ef4444; /* ~Tailwind red-500 */
-  opacity: 0.86; /* Litt svakere for bedre lesbarhet */
+  color: #ff5667;
+  opacity: 0.96;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1843,13 +1859,13 @@ tr > td:nth-child(4)  /* Date/Time */ {
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.15rem;
+  margin-bottom: 0.85rem;
 }
 
 .backtest-page-header h1 {
   margin: 0;
   color: #d7e5f8;
-  font-size: clamp(1.65rem, 2.6vw, 2.35rem);
+  font-size: clamp(1.55rem, 2.2vw, 1.95rem);
   font-weight: 750;
   letter-spacing: -0.035em;
   text-align: left;
@@ -1857,8 +1873,9 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 .backtest-page-header p {
   max-width: 52rem;
-  margin: 0.25rem 0 0;
+  margin: 0.12rem 0 0;
   color: #9eacbc;
+  font-size: 0.88rem;
 }
 
 .backtest-header-actions {
@@ -1869,10 +1886,10 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 .parity-badge {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 38px;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.55rem 0.8rem;
+  padding: 0.45rem 0.72rem;
   border: 1px solid #4a6178;
   border-radius: 6px;
   background: rgba(74, 97, 120, 0.12);
@@ -1897,7 +1914,8 @@ tr > td:nth-child(4)  /* Date/Time */ {
 }
 
 .dashboard-view .backtest-run-button {
-  min-width: 158px;
+  min-width: 150px;
+  min-height: 42px;
   background: linear-gradient(180deg, #2294ff, #087af0);
   color: white;
   box-shadow: 0 9px 24px rgba(8, 122, 240, 0.18);
@@ -1906,7 +1924,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .backtest-layout {
   display: grid;
   grid-template-columns: minmax(270px, 0.74fr) minmax(300px, 0.78fr) minmax(620px, 1.95fr);
-  gap: 1rem;
+  gap: 0.8rem;
   align-items: start;
 }
 
@@ -1914,7 +1932,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.8rem;
 }
 
 .backtest-results-column {
@@ -1954,23 +1972,24 @@ tr > td:nth-child(4)  /* Date/Time */ {
 }
 
 .dashboard-view .research-card {
-  border-color: #344353;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.015), transparent 40%), #18222d;
+  border-color: #2b4455;
+  background: #10212d;
 }
 
 .dashboard-view .research-card-title {
   margin: 0;
-  color: #70b9ff;
-  font-size: 1rem;
+  color: #55b4ff;
+  font-size: 0.92rem;
   text-align: left;
 }
 
 .dashboard-view .research-card-body {
-  padding: 1rem;
+  padding: 0.82rem 0.9rem;
 }
 
 .dashboard-view .research-field {
-  grid-template-columns: minmax(112px, 0.86fr) minmax(118px, 1fr);
+  grid-template-columns: minmax(112px, 0.9fr) minmax(108px, 0.95fr) 20px;
+  gap: 0.55rem;
 }
 
 .dashboard-view.research-view input[type='text'],
@@ -1978,9 +1997,9 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .dashboard-view.research-view input[type='datetime-local'],
 .dashboard-view.research-view select,
 .dashboard-view.research-view textarea {
-  border-color: #445466;
-  background: #202c38;
-  color: #edf3fa;
+  border-color: #365164;
+  background-color: #102431;
+  color: #e4f0f8;
 }
 
 .dashboard-view input[type='number'] {
@@ -2002,9 +2021,9 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .preset-card-row textarea {
   width: 100%;
   resize: vertical;
-  border: 1px solid #445466;
-  border-radius: 6px;
-  background: #202c38;
+  border: 1px solid #365164;
+  border-radius: 5px;
+  background: #102431;
   color: #edf3fa;
 }
 
@@ -2030,9 +2049,9 @@ tr > td:nth-child(4)  /* Date/Time */ {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   overflow: hidden;
-  border: 1px solid #445466;
-  border-radius: 6px;
-  background: #202c38;
+  border: 1px solid #365164;
+  border-radius: 5px;
+  background: #102431;
 }
 
 .field-with-unit input,
@@ -2057,8 +2076,8 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 .safeguard-line {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 82px;
-  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) 82px 20px;
+  gap: 0.55rem;
   align-items: center;
 }
 
@@ -2073,8 +2092,8 @@ tr > td:nth-child(4)  /* Date/Time */ {
 }
 
 .backtest-kpi {
-  min-height: 92px;
-  padding: 0.85rem 0.9rem;
+  min-height: 84px;
+  padding: 0.72rem 0.82rem;
 }
 
 .backtest-kpi span {
@@ -2093,14 +2112,23 @@ tr > td:nth-child(4)  /* Date/Time */ {
   letter-spacing: -0.02em;
 }
 
+.backtest-kpi strong.profit {
+  color: #3ce6a0;
+}
+
+.backtest-kpi strong.loss,
+.backtest-kpi strong.metric-negative {
+  color: #ff5667;
+}
+
 .backtest-chart-wrap {
-  height: 400px;
+  height: 360px;
   overflow: hidden;
 }
 
 .backtest-empty-state {
   display: flex;
-  min-height: 400px;
+  min-height: 360px;
   align-items: center;
   justify-content: center;
   flex-direction: column;
@@ -2136,7 +2164,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .dashboard-view .compact-trades-table td,
 .dashboard-view .full-trade-table th,
 .dashboard-view .full-trade-table td {
-  padding: 0.62rem 0.68rem;
+  padding: 0.52rem 0.62rem;
   border: 0;
   border-bottom: 1px solid #2a3947;
   background: transparent;
@@ -2148,9 +2176,21 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 .dashboard-view .compact-trades-table th,
 .dashboard-view .full-trade-table th {
-  background: #202c38;
+  background: #142a38;
   color: #aebdce;
   font-size: 0.71rem;
+  font-weight: 700;
+}
+
+.dashboard-view .compact-trades-table td.dir-long,
+.dashboard-view .compact-trades-table td.profit {
+  color: #3ce6a0;
+  font-weight: 700;
+}
+
+.dashboard-view .compact-trades-table td.dir-short,
+.dashboard-view .compact-trades-table td.loss {
+  color: #ff5667;
   font-weight: 700;
 }
 
@@ -2172,13 +2212,13 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .dashboard-view .research-secondary,
 .open-optimize-link {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 38px;
   align-items: center;
   justify-content: center;
-  padding: 0.65rem 1rem;
-  border: 1px solid #4b6074;
-  border-radius: 6px;
-  background: #1a2631;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid #3b566a;
+  border-radius: 5px;
+  background: #122532;
   color: #d7e3f1;
   font-size: 0.82rem;
   font-weight: 700;
@@ -2192,7 +2232,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .trade-log-overlay {
   position: fixed;
   z-index: 90;
-  top: 68px;
+  top: 49px;
   right: 0;
   bottom: 0;
   left: 0;
@@ -2215,10 +2255,10 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 .trade-log-dialog {
   display: flex;
-  width: min(100%, 1660px);
+  width: 100%;
   min-height: 100%;
   margin: 0 auto;
-  padding: 1.6rem clamp(1rem, 2vw, 2rem) 3rem;
+  padding: 0.9rem 1.25rem 2rem;
   box-sizing: border-box;
   flex-direction: column;
   background: transparent;
@@ -2231,13 +2271,13 @@ tr > td:nth-child(4)  /* Date/Time */ {
   align-items: flex-end;
   justify-content: space-between;
   gap: 1.5rem;
-  margin-bottom: 1.15rem;
+  margin-bottom: 0.85rem;
 }
 
 .trade-log-dialog-header h2 {
   margin: 0;
   color: #d7e5f8;
-  font-size: clamp(1.65rem, 2.6vw, 2.35rem);
+  font-size: clamp(1.55rem, 2.2vw, 1.95rem);
   font-weight: 750;
   letter-spacing: -0.035em;
 }
@@ -2290,9 +2330,9 @@ tr > td:nth-child(4)  /* Date/Time */ {
 .trade-log-table-wrap {
   flex: 0 0 auto;
   overflow: visible;
-  border: 1px solid #344353;
-  border-radius: 8px;
-  background: #151f29;
+  border: 1px solid #2b4455;
+  border-radius: 6px;
+  background: #0f202b;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.13);
 }
 
@@ -2308,9 +2348,9 @@ tr > td:nth-child(4)  /* Date/Time */ {
   position: sticky;
   z-index: 2;
   top: 0;
-  padding: 0.78rem 0.72rem;
+  padding: 0.58rem 0.62rem;
   border-bottom: 1px solid #405164;
-  background: #202c38;
+  background: #142a38;
   color: #b6c5d5;
   font-size: 0.72rem;
   font-weight: 750;
@@ -2319,10 +2359,10 @@ tr > td:nth-child(4)  /* Date/Time */ {
 }
 
 .trade-log-table td {
-  padding: 0.68rem 0.72rem;
+  padding: 0.52rem 0.62rem;
   border: 0;
   border-bottom: 1px solid #293846;
-  background: #151f29;
+  background: #0f202b;
   color: #dce5ef;
   font-size: 0.76rem;
   text-align: left;
@@ -2331,7 +2371,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
 }
 
 .trade-log-table tr:hover td {
-  background: #192631;
+  background: #142936;
 }
 
 .trade-log-table .trade-entry-row td {
@@ -2381,7 +2421,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 @media (max-width: 720px) {
   .trade-log-overlay {
-    top: 120px;
+    top: 101px;
   }
 
   .trade-log-dialog-header {
@@ -2421,6 +2461,10 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
   .backtest-header-actions > * {
     flex: 1;
+  }
+
+  .backtest-header-actions > .field-tooltip {
+    flex: 0 0 20px;
   }
 
   .backtest-layout {

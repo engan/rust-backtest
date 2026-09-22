@@ -27,7 +27,7 @@ import { RouterLink, RouterView } from 'vue-router'
 .app-shell {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 16% -10%, rgba(55, 115, 180, 0.12), transparent 28rem), #111820;
+    radial-gradient(circle at 15% -12%, rgba(33, 111, 176, 0.11), transparent 30rem), #0b1721;
 }
 
 .app-header {
@@ -35,19 +35,19 @@ import { RouterLink, RouterView } from 'vue-router'
   top: 0;
   z-index: 100;
   display: flex;
-  min-height: 68px;
+  min-height: 49px;
   align-items: center;
-  gap: clamp(2rem, 8vw, 8rem);
-  padding: 0 clamp(1rem, 3vw, 2.2rem);
-  border-bottom: 1px solid #2c3946;
-  background: rgba(16, 24, 32, 0.96);
+  gap: clamp(2rem, 6vw, 6rem);
+  padding: 0 1.25rem;
+  border-bottom: 1px solid #263b4b;
+  background: rgba(10, 24, 34, 0.97);
   backdrop-filter: blur(14px);
 }
 
 .app-brand {
   color: #f4f7fb;
-  font-size: clamp(1.05rem, 1.6vw, 1.45rem);
-  font-weight: 700;
+  font-size: clamp(1.02rem, 1.35vw, 1.28rem);
+  font-weight: 750;
   letter-spacing: -0.025em;
   white-space: nowrap;
 }
@@ -67,9 +67,10 @@ import { RouterLink, RouterView } from 'vue-router'
   position: relative;
   display: flex;
   align-items: center;
-  padding: 0 1.2rem;
-  color: #b7c3d1;
-  font-weight: 600;
+  padding: 0 1rem;
+  color: #b5c8d8;
+  font-size: 0.84rem;
+  font-weight: 550;
 }
 
 .app-nav a:hover {
@@ -93,9 +94,9 @@ import { RouterLink, RouterView } from 'vue-router'
 }
 
 #app-container {
-  width: min(100%, 1660px);
+  width: 100%;
   margin: 0 auto;
-  padding: 1.6rem clamp(1rem, 2vw, 2rem) 3rem;
+  padding: 0.9rem 1.25rem 2rem;
 }
 
 @media (max-width: 720px) {

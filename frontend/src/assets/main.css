@@ -4,6 +4,14 @@ html {
   scrollbar-gutter: stable;
 }
 
+body {
+  background: #0b1721;
+  font-family:
+    Inter, "Segoe UI Variable", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  letter-spacing: -0.008em;
+}
+
 #app {
   margin: 0 auto;
   padding: 0;

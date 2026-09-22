@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import FieldTooltip from '@/components/FieldTooltip.vue'
 
 type NumericAxis = {
   id: string
@@ -54,6 +55,14 @@ const validation = reactive({
   maximumDrawdown: 25,
   minimumProfitFactor: 1,
 })
+
+const axisHelp: Record<string, string> = {
+  ema_length: 'EMA lookback values that will be evaluated as separate optimization candidates.',
+  ema_source: 'Price sources included as discrete EMA-source candidates.',
+  trailing_sl_percent: 'Trailing stop percentages included in the parameter search.',
+  static_tp_percent: 'Static take-profit percentages included in the parameter search.',
+  dmi_threshold: 'ADX pause thresholds included when this optimization axis is enabled.',
+}
 
 const axes = reactive<ResearchAxis[]>([
   {
@@ -248,10 +257,12 @@ const openMonteCarlo = () => {
                 <option>EMA / VWAP</option>
                 <option>SMA Crossover</option>
               </select>
+              <FieldTooltip label="Strategy" text="Strategy whose parameters will be searched and validated." />
             </div>
             <div class="research-field">
               <label for="research-symbol">Symbol</label>
               <input id="research-symbol" v-model="setup.symbol" />
+              <FieldTooltip label="Symbol" text="Market dataset used for every candidate in this optimization job." />
             </div>
             <div class="research-field">
               <label for="research-timeframe">Timeframe</label>
@@ -261,14 +272,17 @@ const openMonteCarlo = () => {
                 <option>4h</option>
                 <option>1d</option>
               </select>
+              <FieldTooltip label="Timeframe" text="Candle interval used to evaluate all candidates. Bar-based parameters represent different real time when this changes." />
             </div>
             <div class="research-field">
               <label for="research-bars">Dataset</label>
               <input id="research-bars" v-model.number="setup.dataset" type="number" min="100" />
+              <FieldTooltip label="Dataset" text="Number of historical candles available to the optimization and walk-forward windows." />
             </div>
             <div class="research-field">
               <label for="research-cutoff">End before (UTC)</label>
               <input id="research-cutoff" v-model="setup.endBefore" type="datetime-local" />
+              <FieldTooltip label="End before" text="Exclusive UTC cutoff for the optimization dataset. Fix this value to make research runs reproducible." />
             </div>
           </div>
         </section>
@@ -282,10 +296,12 @@ const openMonteCarlo = () => {
                 <option>Rolling walk-forward</option>
                 <option>Anchored walk-forward</option>
               </select>
+              <FieldTooltip label="Validation method" text="Rolling uses a moving training window; anchored keeps the original start and expands the training history over time." />
             </div>
             <div class="research-field">
               <label for="train-days">Train</label>
               <input id="train-days" v-model.number="validation.trainDays" type="number" min="1" />
+              <FieldTooltip label="Train" text="Calendar days used to fit and rank parameter candidates in each walk-forward fold." />
             </div>
             <div class="research-field">
               <label for="validate-days">Validate</label>
@@ -295,10 +311,12 @@ const openMonteCarlo = () => {
                 type="number"
                 min="1"
               />
+              <FieldTooltip label="Validate" text="Calendar days kept out of sample to test candidates selected by the training window." />
             </div>
             <div class="research-field">
               <label for="step-days">Step</label>
               <input id="step-days" v-model.number="validation.stepDays" type="number" min="1" />
+              <FieldTooltip label="Step" text="Calendar days the walk-forward window advances between consecutive folds." />
             </div>
             <div class="research-divider" />
             <div class="research-field">
@@ -309,6 +327,7 @@ const openMonteCarlo = () => {
                 type="number"
                 min="0"
               />
+              <FieldTooltip label="Minimum trades" text="Rejects candidates with too few completed trades for a meaningful comparison." />
             </div>
             <div class="research-field">
               <label for="maximum-drawdown">Maximum DD %</label>
@@ -318,6 +337,7 @@ const openMonteCarlo = () => {
                 type="number"
                 min="0"
               />
+              <FieldTooltip label="Maximum drawdown" text="Eligibility ceiling for out-of-sample maximum equity drawdown, expressed as a percentage." />
             </div>
             <div class="research-field">
               <label for="minimum-pf">Minimum PF</label>
@@ -328,6 +348,7 @@ const openMonteCarlo = () => {
                 min="0"
                 step="0.1"
               />
+              <FieldTooltip label="Minimum profit factor" text="Rejects candidates whose out-of-sample gross-profit-to-gross-loss ratio is below this value." />
             </div>
           </div>
         </section>
@@ -349,7 +370,10 @@ const openMonteCarlo = () => {
               </div>
 
               <div v-for="axis in axes" :key="axis.id" class="axis-row">
-                <div class="axis-cell axis-name">{{ axis.label }}</div>
+                <div class="axis-cell axis-name axis-name-with-help">
+                  {{ axis.label }}
+                  <FieldTooltip :label="axis.label" :text="axisHelp[axis.id] ?? 'Parameter values included in the optimization search.'" />
+                </div>
                 <div class="axis-cell axis-check">
                   <input
                     v-model="axis.enabled"
