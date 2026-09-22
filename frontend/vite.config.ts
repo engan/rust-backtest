@@ -39,6 +39,11 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/binance-proxy/, '/api/v3'), // Fjern prefix og legg til Binance sin
         // secure: false, // Kan være nødvendig hvis det er SSL-problemer (vanligvis ikke)
       },
+      '/research-api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/research-api/, '/api'),
+      },
       // --- SLUTT ENDRING ---
       // Man kan legge til flere proxy-regler her om nødvendig
     },

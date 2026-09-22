@@ -431,6 +431,16 @@
   font-size: 11px;
 }
 
+.chart-data-notice {
+  display: grid;
+  min-height: 240px;
+  place-items: center;
+  padding: 1rem;
+  color: #8ea6bc;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -482,6 +492,93 @@
   color: #edf4fb;
   font-size: 0.9rem;
   line-height: 1.4;
+}
+
+.evidence-lines {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.evidence-lines > span:first-child {
+  color: #eef6ff;
+  font-weight: 700;
+}
+
+.evidence-lines > span:nth-child(2) {
+  color: #9eb1c4;
+  font-size: 0.8rem;
+}
+
+.evidence-quality {
+  width: fit-content;
+  margin-top: 0.18rem;
+  padding: 0.22rem 0.48rem;
+  border: 1px solid #496176;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.evidence-quality--success {
+  border-color: #2d995d;
+  background: rgba(42, 157, 91, 0.12);
+  color: #70eaa5;
+}
+
+.evidence-quality--warning {
+  border-color: #ac7d2b;
+  background: rgba(172, 125, 43, 0.14);
+  color: #f0c978;
+}
+
+.evidence-quality--danger {
+  border-color: #b9505c;
+  background: rgba(185, 80, 92, 0.14);
+  color: #ff8b98;
+}
+
+.evidence-quality--neutral {
+  color: #a7b8c9;
+}
+
+.evidence-comparison-card {
+  overflow-x: auto;
+}
+
+.evidence-comparison-table {
+  min-width: 720px;
+  padding: 0.35rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.evidence-comparison-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.5fr) repeat(5, minmax(90px, 0.75fr));
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.58rem 0.9rem;
+  border-bottom: 1px solid var(--research-border-soft);
+  color: #c7d4e2;
+  font-size: 0.76rem;
+}
+
+.evidence-comparison-row:last-child {
+  border-bottom: 0;
+}
+
+.evidence-comparison-row > span:not(:first-child) {
+  text-align: right;
+}
+
+.evidence-comparison-head {
+  color: #8fa2b5;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.evidence-comparison-primary {
+  background: rgba(35, 140, 241, 0.08);
+  color: #e9f4ff;
 }
 
 .risk-list {

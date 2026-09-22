@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import FieldTooltip from '@/components/FieldTooltip.vue'
+import { fetchBinanceKlines, fetchSymbolFilters } from '@/services/binanceAPI'
+import {
+  createResearchJob,
+  downloadResearchReport,
+  getResearchReport,
+  unwrapResearchReport,
+  waitForResearchJob,
+  type ResearchJobSnapshot,
+} from '@/services/researchAPI'
 
 type NumericAxis = {
   id: string
@@ -30,13 +39,55 @@ type CandidateRow = {
   drawdown: number
   profitFactor: number
   eligible: boolean
+  fullDatasetTrades: number
+  parameters: Record<string, unknown>
+}
+
+type OptimizationReport = {
+  optimization?: {
+    evaluations?: Array<{
+      parameters?: { params?: Record<string, unknown> } & Record<string, unknown>
+      rejection_reasons?: string[]
+      summary?: {
+        net_profit?: number
+        max_drawdown_percent?: number
+        profit_factor?: number
+        total_trades?: number
+      }
+    }>
+  }
+  walk_forward?: {
+    total_validation_trades?: number
+    windows?: unknown[]
+  }
+}
+
+type ResearchEnvelope = {
+  job?: { id?: string; createdAt?: string }
+  reproducibility?: {
+    dataset?: { symbol?: string; timeframe?: string; endBeforeUtc?: string | null }
+    fingerprint?: { bars?: number }
+    parameterGrid?: {
+      base?: { strategy?: string }
+      axes?: Array<{ parameter?: string; values?: unknown[] }>
+      max_candidates?: number
+    }
+    plan?: {
+      optimization?: { min_trades?: number; max_drawdown_percent?: number; min_profit_factor?: number }
+      walk_forward?: { training_bars?: number; validation_bars?: number; step_bars?: number; anchored_training?: boolean }
+    }
+  }
+  report?: OptimizationReport
 }
 
 const router = useRouter()
 const reportInput = ref<HTMLInputElement | null>(null)
-const reportLabel = ref('Example data')
+const reportLabel = ref('Not run')
 const reportMessage = ref('')
 const selectedRank = ref(1)
+const activeJob = ref<ResearchJobSnapshot | null>(null)
+const activeReport = ref<ResearchEnvelope | null>(null)
+const isRunning = ref(false)
 
 const setup = reactive({
   strategy: 'EMA / VWAP',
@@ -44,6 +95,7 @@ const setup = reactive({
   timeframe: '1h',
   dataset: 15095,
   endBefore: '2026-09-22T00:00',
+  maxCandidates: 100000,
 })
 
 const validation = reactive({
@@ -64,7 +116,7 @@ const axisHelp: Record<string, string> = {
   dmi_threshold: 'ADX pause thresholds included when this optimization axis is enabled.',
 }
 
-const axes = reactive<ResearchAxis[]>([
+const emaAxes = (): ResearchAxis[] => [
   {
     id: 'ema_length',
     label: 'EMA Length',
@@ -102,52 +154,29 @@ const axes = reactive<ResearchAxis[]>([
     max: 14.05,
     step: 0.5,
   },
-])
-
-const defaultCandidates: CandidateRow[] = [
-  {
-    rank: 1,
-    label: 'EMA 120, High · SL 3.0% · TP 5.0%',
-    netProfit: 4830,
-    drawdown: 12.4,
-    profitFactor: 2.31,
-    eligible: true,
-  },
-  {
-    rank: 2,
-    label: 'EMA 116, High · SL 2.5% · TP 5.0%',
-    netProfit: 4410,
-    drawdown: 13.1,
-    profitFactor: 2.12,
-    eligible: true,
-  },
-  {
-    rank: 3,
-    label: 'EMA 120, Low · SL 3.0% · TP 5.5%',
-    netProfit: 4170,
-    drawdown: 14.8,
-    profitFactor: 2.08,
-    eligible: true,
-  },
-  {
-    rank: 4,
-    label: 'EMA 124, High · SL 2.5% · TP 5.5%',
-    netProfit: 3890,
-    drawdown: 15.6,
-    profitFactor: 1.92,
-    eligible: true,
-  },
-  {
-    rank: 5,
-    label: 'EMA 112, High · SL 3.0% · TP 6.0%',
-    netProfit: 3640,
-    drawdown: 16.1,
-    profitFactor: 1.87,
-    eligible: true,
-  },
 ]
 
-const candidates = ref<CandidateRow[]>(defaultCandidates)
+const smaAxes = (): ResearchAxis[] => [
+  { id: 'sma_fast_period', label: 'Fast SMA Period', type: 'numeric', enabled: true, min: 8, max: 14, step: 1 },
+  { id: 'sma_slow_period', label: 'Slow SMA Period', type: 'numeric', enabled: true, min: 60, max: 90, step: 5 },
+  { id: 'trailing_sl_percent', label: 'Trailing SL %', type: 'numeric', enabled: true, min: 2, max: 4, step: 0.5 },
+  { id: 'static_tp_percent', label: 'Static TP %', type: 'numeric', enabled: true, min: 4, max: 7, step: 0.5 },
+  { id: 'dmi_threshold', label: 'ADX pause below', type: 'numeric', enabled: false, min: 14.05, max: 14.05, step: 0.5 },
+]
+
+const axes = reactive<ResearchAxis[]>(emaAxes())
+const candidates = ref<CandidateRow[]>([])
+
+watch(
+  () => setup.strategy,
+  (strategy) => {
+    axes.splice(0, axes.length, ...(strategy === 'EMA / VWAP' ? emaAxes() : smaAxes()))
+    candidates.value = []
+    activeReport.value = null
+    reportLabel.value = 'Not run'
+  },
+  { flush: 'sync' },
+)
 
 const axisCount = (axis: ResearchAxis): number => {
   if (!axis.enabled) return 1
@@ -162,6 +191,20 @@ const candidateCount = computed(() =>
 
 const estimatedSeconds = computed(() => Math.max(1, Math.ceil(candidateCount.value / 125)))
 
+const candidatePoints = computed(() => {
+  if (!candidates.value.length) return []
+  const maxDrawdown = Math.max(...candidates.value.map((candidate) => candidate.drawdown), 1)
+  const profits = candidates.value.map((candidate) => candidate.netProfit)
+  const minProfit = Math.min(...profits)
+  const maxProfit = Math.max(...profits)
+  const profitRange = Math.max(maxProfit - minProfit, 1)
+  return candidates.value.map((candidate) => ({
+    ...candidate,
+    x: 55 + (candidate.drawdown / maxDrawdown) * 480,
+    y: 215 - ((candidate.netProfit - minProfit) / profitRange) * 190,
+  }))
+})
+
 const number = (value: number, digits = 0) =>
   new Intl.NumberFormat('en-US', {
     minimumFractionDigits: digits,
@@ -170,14 +213,149 @@ const number = (value: number, digits = 0) =>
 
 const selectCandidate = (rank: number) => {
   selectedRank.value = rank
+  cacheSelectedCandidate()
 }
 
 const describeParameters = (parameters: Record<string, unknown>): string => {
+  if ('fast_period' in parameters) {
+    return `SMA ${parameters.fast_period}/${parameters.slow_period} · SL ${parameters.trailing_sl_perc}% · TP ${parameters.fixed_tp_for_trailing_perc}%`
+  }
   const ema = parameters.ema_length ?? '—'
   const source = parameters.ema_source ?? '—'
   const sl = parameters.trailing_sl_perc ?? '—'
   const tp = parameters.fixed_tp_for_trailing_perc ?? '—'
   return `EMA ${ema}, ${source} · SL ${sl}% · TP ${tp}%`
+}
+
+const applyReport = (value: unknown, label: string) => {
+  const envelope = value as ResearchEnvelope
+  const report = unwrapResearchReport<OptimizationReport>(value)
+  const evaluations = report.optimization?.evaluations
+  if (!Array.isArray(evaluations) || evaluations.length === 0) {
+    throw new Error('The file does not contain optimization.evaluations.')
+  }
+  candidates.value = evaluations.slice(0, 10).map((evaluation, index) => {
+    const parameters = evaluation.parameters?.params ?? {}
+    return {
+      rank: index + 1,
+      label: describeParameters(parameters),
+      netProfit: evaluation.summary?.net_profit ?? 0,
+      drawdown: evaluation.summary?.max_drawdown_percent ?? 0,
+      profitFactor: evaluation.summary?.profit_factor ?? 0,
+      eligible: (evaluation.rejection_reasons?.length ?? 0) === 0,
+      fullDatasetTrades: evaluation.summary?.total_trades ?? 0,
+      parameters: evaluation.parameters ?? {},
+    }
+  })
+  selectedRank.value = candidates.value.find((candidate) => candidate.eligible)?.rank ?? 1
+  activeReport.value = 'report' in envelope ? envelope : ({ report } as ResearchEnvelope)
+  const definition = envelope.reproducibility
+  if (definition) {
+    const strategy = definition.parameterGrid?.base?.strategy === 'sma_crossover' ? 'SMA Crossover' : 'EMA / VWAP'
+    setup.strategy = strategy
+    setup.symbol = definition.dataset?.symbol ?? setup.symbol
+    setup.timeframe = definition.dataset?.timeframe ?? setup.timeframe
+    setup.endBefore = definition.dataset?.endBeforeUtc?.replace(/:00Z$/, '') ?? setup.endBefore
+    setup.dataset = definition.fingerprint?.bars ?? setup.dataset
+    setup.maxCandidates = definition.parameterGrid?.max_candidates ?? setup.maxCandidates
+    const gridAxes = definition.parameterGrid?.axes ?? []
+    for (const axis of axes) {
+      const saved = gridAxes.find((candidate) => candidate.parameter === axis.id)
+      axis.enabled = Boolean(saved)
+      if (!saved?.values?.length) continue
+      if (axis.type === 'values') {
+        axis.values = saved.values.map(String)
+      } else {
+        const values = saved.values.map(Number).filter(Number.isFinite)
+        if (values.length) {
+          axis.min = Math.min(...values)
+          axis.max = Math.max(...values)
+          axis.step = values.length > 1 ? values[1] - values[0] : axis.step
+        }
+      }
+    }
+    const optimization = definition.plan?.optimization
+    validation.minimumTrades = optimization?.min_trades ?? validation.minimumTrades
+    validation.maximumDrawdown = optimization?.max_drawdown_percent ?? validation.maximumDrawdown
+    validation.minimumProfitFactor = optimization?.min_profit_factor ?? validation.minimumProfitFactor
+    const walkForward = definition.plan?.walk_forward
+    const barsPerDay = 1440 / ({ '15m': 15, '1h': 60, '4h': 240, '1d': 1440 }[setup.timeframe] ?? 60)
+    if (walkForward) {
+      validation.trainDays = Math.round((walkForward.training_bars ?? 0) / barsPerDay)
+      validation.validateDays = Math.round((walkForward.validation_bars ?? 0) / barsPerDay)
+      validation.stepDays = Math.round((walkForward.step_bars ?? 0) / barsPerDay)
+      validation.method = walkForward.anchored_training ? 'Anchored walk-forward' : 'Rolling walk-forward'
+    }
+  }
+  activeJob.value = envelope.job?.id
+    ? {
+        id: envelope.job.id,
+        kind: 'optimization',
+        status: 'completed',
+        stage: 'complete',
+        completed: evaluations.length,
+        total: evaluations.length,
+        percent: 100,
+        message: 'Loaded saved research report',
+        createdAt: envelope.job.createdAt ?? '',
+        reportUrl: null,
+        error: null,
+      }
+    : activeJob.value
+  reportLabel.value = label
+  cacheSelectedCandidate()
+}
+
+const cacheSelectedCandidate = () => {
+  const selected = candidates.value.find((candidate) => candidate.rank === selectedRank.value)
+  if (!selected || !activeReport.value) return
+  sessionStorage.setItem(
+    'selected-research-candidate',
+    JSON.stringify({
+      sourceResearchJobId: activeReport.value.job?.id,
+      candidate: selected.parameters,
+      description: selected.label,
+      strategy: setup.strategy,
+      dataset: { symbol: setup.symbol, timeframe: setup.timeframe, endBeforeUtc: setup.endBefore || null },
+      initialCapital: 10000,
+      evidencePreview: {
+        fullDatasetTrades: selected.fullDatasetTrades,
+        outOfSampleTrades: activeReport.value.report?.walk_forward?.total_validation_trades ?? 0,
+        walkForwardWindows: activeReport.value.report?.walk_forward?.windows?.length ?? 0,
+      },
+    }),
+  )
+}
+
+const cacheResearchReport = (value: unknown) => {
+  const envelope = value as ResearchEnvelope
+  const report = unwrapResearchReport<OptimizationReport>(value)
+  const compactEnvelope: ResearchEnvelope = {
+    ...envelope,
+    report: {
+      optimization: {
+        ...report.optimization,
+        evaluations: report.optimization?.evaluations?.slice(0, 10),
+      },
+      walk_forward: report.walk_forward
+        ? {
+            total_validation_trades: report.walk_forward.total_validation_trades,
+            windows: report.walk_forward.windows?.map(() => ({})),
+          }
+        : undefined,
+    },
+  }
+  const serialized = JSON.stringify(compactEnvelope)
+  try {
+    sessionStorage.setItem('research-report', serialized)
+  } catch {
+    sessionStorage.removeItem('research-report')
+    try {
+      sessionStorage.setItem('research-report', serialized)
+    } catch {
+      // The native report remains available for export and on disk even if browser caching is unavailable.
+    }
+  }
 }
 
 const openReportPicker = () => reportInput.value?.click()
@@ -189,36 +367,10 @@ const importReport = async (event: Event) => {
 
   try {
     const text = await file.text()
-    const report = JSON.parse(text) as {
-      optimization?: {
-        evaluations?: Array<{
-          parameters?: { params?: Record<string, unknown> }
-          rejection_reasons?: string[]
-          summary?: {
-            net_profit?: number
-            max_drawdown_percent?: number
-            profit_factor?: number
-          }
-        }>
-      }
-    }
-    const evaluations = report.optimization?.evaluations
-    if (!Array.isArray(evaluations) || evaluations.length === 0) {
-      throw new Error('The file does not contain optimization.evaluations.')
-    }
-
-    candidates.value = evaluations.slice(0, 12).map((evaluation, index) => ({
-      rank: index + 1,
-      label: describeParameters(evaluation.parameters?.params ?? {}),
-      netProfit: evaluation.summary?.net_profit ?? 0,
-      drawdown: evaluation.summary?.max_drawdown_percent ?? 0,
-      profitFactor: evaluation.summary?.profit_factor ?? 0,
-      eligible: (evaluation.rejection_reasons?.length ?? 0) === 0,
-    }))
-    selectedRank.value = 1
-    reportLabel.value = 'Imported report'
+    const parsed = JSON.parse(text)
+    applyReport(parsed, 'Imported report')
     reportMessage.value = `${file.name} loaded successfully.`
-    sessionStorage.setItem('research-report', text)
+    cacheResearchReport(parsed)
   } catch (error) {
     reportMessage.value = error instanceof Error ? error.message : 'Could not read the report.'
   } finally {
@@ -226,14 +378,109 @@ const importReport = async (event: Event) => {
   }
 }
 
-const prepareRun = () => {
-  reportMessage.value =
-    'The search space is ready. Connecting this screen to the native Rust job runner is the next implementation step.'
+const valuesForAxis = (axis: ResearchAxis): unknown[] => {
+  if (axis.type === 'values') return axis.values
+  const values: number[] = []
+  for (let value = axis.min; value <= axis.max + axis.step * 1e-9; value += axis.step) {
+    values.push(Number(value.toFixed(8)))
+  }
+  return values
+}
+
+const baseCommon = () => ({
+  behavior_mode: 'Improved', atr_threshold_percent: false, atr_threshold_fl_percent: 1,
+  reset_fl_on_opposite: true, fl_expiry_bars: 48, cooldown_bars: 48,
+  adx_resume_threshold: 16, adx_resume_bars: 3, order_size_mode: 'percentOfEquity',
+  order_size_value: 100, sl_tp_method: 'TrailingPercent', fixed_sl_perc: 1,
+  fixed_tp_perc: 2, trailing_sl_perc: 3, fixed_tp_for_trailing_perc: 5,
+  atr_length: 14, risk_perc: 1, risk_gearing: 1, atr_mult_rb: 1.5,
+  reward_mult_rb: 2, close_on_opposite: true, parity_mode: true,
+  fashionably_late_mode: 'Atr', atr_threshold_fl: 1.3, enable_max_drawdown: true,
+  max_drawdown_perc: 22, enable_max_consecutive_losses: true,
+  max_consecutive_losses: 5, enable_dmi_filter: true, dmi_length: 6,
+  dmi_smoothing: 24, dmi_threshold: 14.05,
+})
+
+const intervalMinutes = computed(() => ({ '15m': 15, '1h': 60, '4h': 240, '1d': 1440 }[setup.timeframe] ?? 60))
+const daysToBars = (days: number) => Math.max(1, Math.round((days * 1440) / intervalMinutes.value))
+
+const prepareRun = async () => {
+  if (candidateCount.value < 1) return
+  if (candidateCount.value > setup.maxCandidates) {
+    reportMessage.value = `${number(candidateCount.value)} combinations exceed the job safety limit of ${number(setup.maxCandidates)}.`
+    return
+  }
+  isRunning.value = true
+  reportMessage.value = 'Fetching the fixed market dataset…'
+  candidates.value = []
+  try {
+    const endTime = setup.endBefore ? Date.parse(`${setup.endBefore}:00Z`) : undefined
+    const [klines, filters] = await Promise.all([
+      fetchBinanceKlines(setup.symbol, setup.timeframe, setup.dataset, endTime),
+      fetchSymbolFilters(setup.symbol),
+    ])
+    const common = baseCommon()
+    const parameterGrid = {
+      base:
+        setup.strategy === 'EMA / VWAP'
+          ? { strategy: 'ema_vwap', params: { ...common, ema_length: 122, ema_source: 'High', vwap_anchor_period: 'Week', vwap_source: 'Open', trade_direction: 'Long' } }
+          : { strategy: 'sma_crossover', params: { ...common, fast_period: 10, slow_period: 73, trade_direction: 'Both' } },
+      axes: axes.filter((axis) => axis.enabled).map((axis) => ({ parameter: axis.id, values: valuesForAxis(axis) })),
+      max_candidates: setup.maxCandidates,
+    }
+    const job = await createResearchJob({
+      klines,
+      config: { commission_percent: 0.05, slippage_ticks: 2, tick_size: filters.tickSize, step_size: filters.stepSize },
+      initialCapital: 10000,
+      flags: { price_to_tick: false, quantity_step: true, sl_tp_tick: false },
+      parameterGrid,
+      plan: {
+        optimization: { min_trades: validation.minimumTrades, max_drawdown_percent: validation.maximumDrawdown, min_profit_factor: validation.minimumProfitFactor, score_metric: { composite: { drawdown_weight: 1, profit_factor_weight: 2 } } },
+        walk_forward_optimization: { min_trades: Math.max(1, Math.floor(validation.minimumTrades / 6)), max_drawdown_percent: validation.maximumDrawdown, min_profit_factor: null, score_metric: { composite: { drawdown_weight: 1, profit_factor_weight: 2 } } },
+        walk_forward: { training_bars: daysToBars(validation.trainDays), validation_bars: daysToBars(validation.validateDays), step_bars: daysToBars(validation.stepDays), anchored_training: validation.method === 'Anchored walk-forward', max_windows: 100 },
+        monte_carlo: null,
+        monte_carlo_top_candidates: 1,
+      },
+      dataset: { symbol: setup.symbol, timeframe: setup.timeframe, endBeforeUtc: setup.endBefore || null },
+    })
+    activeJob.value = job
+    reportLabel.value = 'Running'
+    await waitForResearchJob(job.id, (progress) => {
+      activeJob.value = progress
+      reportMessage.value = progress.message
+    })
+    const envelope = await getResearchReport<ResearchEnvelope>(job.id)
+    activeReport.value = envelope
+    applyReport(envelope, 'Native Rust report')
+    cacheResearchReport(envelope)
+    reportMessage.value = `Completed and saved as ${job.id}.`
+  } catch (error) {
+    reportLabel.value = 'Failed'
+    reportMessage.value = error instanceof Error ? error.message : 'Optimization failed.'
+  } finally {
+    isRunning.value = false
+  }
+}
+
+const exportReport = () => {
+  if (!activeReport.value) return
+  downloadResearchReport(activeReport.value, `${activeReport.value.job?.id ?? 'research-report'}.json`)
 }
 
 const openMonteCarlo = () => {
+  cacheSelectedCandidate()
   void router.push('/monte-carlo')
 }
+
+onMounted(() => {
+  const cached = sessionStorage.getItem('research-report')
+  if (!cached) return
+  try {
+    applyReport(JSON.parse(cached), 'Saved native report')
+  } catch {
+    sessionStorage.removeItem('research-report')
+  }
+})
 </script>
 
 <template>
@@ -283,6 +530,11 @@ const openMonteCarlo = () => {
               <label for="research-cutoff">End before (UTC)</label>
               <input id="research-cutoff" v-model="setup.endBefore" type="datetime-local" />
               <FieldTooltip label="End before" text="Exclusive UTC cutoff for the optimization dataset. Fix this value to make research runs reproducible." />
+            </div>
+            <div class="research-field">
+              <label for="candidate-limit">Candidate safety limit</label>
+              <input id="candidate-limit" v-model.number="setup.maxCandidates" type="number" min="1" step="1000" />
+              <FieldTooltip label="Candidate safety limit" text="Maximum number of parameter combinations this job may expand. Increase it deliberately for very large native searches." />
             </div>
           </div>
         </section>
@@ -412,14 +664,13 @@ const openMonteCarlo = () => {
             </div>
 
             <div class="research-button-row">
-              <button class="research-primary" type="button" @click="prepareRun">
-                ▶ Run optimization
+              <button class="research-primary" type="button" :disabled="isRunning" @click="prepareRun">
+                {{ isRunning ? 'Running optimization…' : '▶ Run optimization' }}
               </button>
             </div>
 
             <div class="research-inline-notice">
-              Native Rust execution will be connected here. Search values are job data and do not
-              require source-code changes.
+              Search values are sent as job data to the native Rust runner; changing them does not require source-code changes.
             </div>
             <div v-if="reportMessage" class="research-inline-notice">{{ reportMessage }}</div>
           </div>
@@ -427,15 +678,15 @@ const openMonteCarlo = () => {
 
         <section class="research-card">
           <h2 class="research-card-title">
-            Execution Preview <small>Runner integration pending</small>
+            Execution Progress <small>{{ activeJob?.stage ?? 'Ready' }}</small>
           </h2>
           <div class="research-card-body">
             <div class="research-summary-line">
               <span>Candidate progress</span>
-              <span>0 / {{ number(candidateCount) }}</span>
+              <span>{{ number(activeJob?.completed ?? 0) }} / {{ number(activeJob?.total || candidateCount) }}</span>
             </div>
             <div class="research-progress-track">
-              <div class="research-progress-bar" style="width: 0%" />
+              <div class="research-progress-bar" :style="{ width: `${activeJob?.percent ?? 0}%` }" />
             </div>
           </div>
         </section>
@@ -472,7 +723,7 @@ const openMonteCarlo = () => {
                     {{ candidate.netProfit >= 0 ? '+' : '' }}{{ number(candidate.netProfit) }}
                   </td>
                   <td>{{ number(candidate.drawdown, 1) }}%</td>
-                  <td>{{ number(candidate.profitFactor, 2) }}</td>
+                  <td>{{ number(candidate.profitFactor, 3) }}</td>
                   <td>
                     <span :class="candidate.eligible ? 'status-check' : 'metric-negative'">{{
                       candidate.eligible ? '✓' : '×'
@@ -493,7 +744,10 @@ const openMonteCarlo = () => {
             <button class="research-secondary" type="button" @click="openReportPicker">
               Import report
             </button>
-            <button class="research-primary" type="button" @click="openMonteCarlo">
+            <button class="research-secondary" type="button" :disabled="!activeReport" @click="exportReport">
+              Export report
+            </button>
+            <button class="research-primary" type="button" :disabled="!candidates.length" @click="openMonteCarlo">
               Run Monte Carlo
             </button>
           </div>
@@ -523,38 +777,23 @@ const openMonteCarlo = () => {
                   class="chart-grid-line"
                 />
               </g>
-              <g fill="#72869b" opacity="0.72">
+              <g>
                 <circle
-                  v-for="i in 58"
-                  :key="i"
-                  :cx="70 + ((i * 73) % 445)"
-                  :cy="37 + ((i * 47) % 160)"
-                  r="3.2"
-                />
+                  v-for="point in candidatePoints"
+                  :key="point.rank"
+                  :cx="point.x"
+                  :cy="point.y"
+                  :r="selectedRank === point.rank ? 7 : 4.5"
+                  :fill="selectedRank === point.rank ? '#2699ff' : point.eligible ? '#46dd89' : '#72869b'"
+                  :stroke="selectedRank === point.rank ? '#d8eeff' : 'none'"
+                  stroke-width="2"
+                >
+                  <title>{{ point.label }} · P&amp;L {{ number(point.netProfit) }} · DD {{ number(point.drawdown, 1) }}%</title>
+                </circle>
               </g>
-              <polyline
-                points="92,48 150,58 225,78 310,100 405,132 500,166"
-                fill="none"
-                stroke="#46dd89"
-                stroke-width="3"
-              />
-              <g fill="#46dd89">
-                <circle
-                  v-for="point in [
-                    [92, 48],
-                    [150, 58],
-                    [225, 78],
-                    [310, 100],
-                    [405, 132],
-                    [500, 166],
-                  ]"
-                  :key="point.join('-')"
-                  :cx="point[0]"
-                  :cy="point[1]"
-                  r="5"
-                />
-              </g>
-              <circle cx="150" cy="58" r="7" fill="#2699ff" stroke="#d8eeff" stroke-width="2" />
+              <text v-if="!candidatePoints.length" x="295" y="120" text-anchor="middle" class="chart-axis-label">
+                Run or import an optimization report
+              </text>
               <text x="270" y="247" text-anchor="middle" class="chart-axis-label">
                 Maximum Drawdown
               </text>

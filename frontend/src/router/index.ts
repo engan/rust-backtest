@@ -19,6 +19,11 @@ const router = createRouter({
       name: 'monte-carlo',
       component: () => import('../views/MonteCarloView.vue'),
     },
+    {
+      path: '/performance',
+      name: 'performance',
+      component: () => import('../views/PerformanceView.vue'),
+    },
   ],
 })
 

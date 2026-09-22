@@ -64,6 +64,23 @@ export interface BacktestConfig {
   slippage_ticks: number;
   tick_size: number;
   step_size: number;
+  enforce_margin?: boolean;
+  margin_long_percent?: number;
+  margin_short_percent?: number;
+}
+
+export interface MarginCallEvent {
+  trade_id: number;
+  bar_index: number;
+  timestamp: number;
+  direction: 'long' | 'short';
+  price: number;
+  quantity_liquidated: number;
+  quantity_remaining: number;
+  equity_before: number;
+  margin_required: number;
+  realized_pnl: number;
+  full_liquidation: boolean;
 }
 
 export interface BacktestSummary {
@@ -76,6 +93,7 @@ export interface BacktestSummary {
   max_drawdown_amount: number;
   net_profit: number;
   pnl_open: number;
+  margin_call_count?: number;
 }
 
 export interface BacktestResult {
@@ -84,6 +102,7 @@ export interface BacktestResult {
   pnl_curve: PnlPoint[]; 
   summary: BacktestSummary;
   bar_log: any[]; // Eller BarLogEntry[]
+  margin_calls?: MarginCallEvent[];
 }
 
 // Typer for SMA Crossover Strategi ---

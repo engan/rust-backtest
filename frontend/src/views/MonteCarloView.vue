@@ -2,6 +2,14 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import FieldTooltip from '@/components/FieldTooltip.vue'
+import {
+  createMonteCarloJob,
+  downloadResearchReport,
+  getResearchReport,
+  unwrapResearchReport,
+  waitForResearchJob,
+  type ResearchJobSnapshot,
+} from '@/services/researchAPI'
 
 type Distribution = {
   minimum: number
@@ -12,6 +20,12 @@ type Distribution = {
   maximum: number
 }
 
+type HistogramBin = {
+  lower_bound: number
+  upper_bound: number
+  count: number
+}
+
 type MonteCarloSummary = {
   simulations: number
   sourceTrades: number
@@ -19,13 +33,70 @@ type MonteCarloSummary = {
   probabilityOfRuin: number
   netProfit: Distribution
   drawdown: Distribution
+  netProfitHistogram: HistogramBin[]
+  drawdownHistogram: HistogramBin[]
 }
+
+type EvidenceSummary = {
+  primary: string
+  minimumSourceTrades: number
+  walkForwardWindows: number
+  outOfSampleTrades: number
+  fullDatasetTrades: number
+}
+
+type MonteCarloReportResult = {
+  simulations?: number
+  source_trades?: number
+  probability_of_loss?: number
+  probability_of_ruin?: number
+  net_profit?: Distribution
+  max_drawdown_percent?: Distribution
+  net_profit_histogram?: HistogramBin[]
+  max_drawdown_percent_histogram?: HistogramBin[]
+}
+
+const emptyDistribution = (): Distribution => ({
+  minimum: 0,
+  p05: 0,
+  p50: 0,
+  mean: 0,
+  p95: 0,
+  maximum: 0,
+})
+
+const emptySummary = (): MonteCarloSummary => ({
+  simulations: 0,
+  sourceTrades: 0,
+  probabilityOfLoss: 0,
+  probabilityOfRuin: 0,
+  netProfit: emptyDistribution(),
+  drawdown: emptyDistribution(),
+  netProfitHistogram: [],
+  drawdownHistogram: [],
+})
 
 const router = useRouter()
 const reportInput = ref<HTMLInputElement | null>(null)
-const reportLabel = ref('Example report')
+const reportLabel = ref('No simulation')
 const reportMessage = ref('')
 const candidateDescription = ref('EMA 100 · High · SL 4.0% · TP 6.0%')
+const selectedCandidate = ref<{
+  sourceResearchJobId?: string
+  candidate: Record<string, unknown>
+  description: string
+  strategy: string
+  dataset: { symbol: string; timeframe: string; endBeforeUtc?: string | null }
+  initialCapital: number
+  evidencePreview?: {
+    fullDatasetTrades?: number
+    outOfSampleTrades?: number
+    walkForwardWindows?: number
+  }
+} | null>(null)
+const activeJob = ref<ResearchJobSnapshot | null>(null)
+const activeReport = ref<unknown>(null)
+const isRunning = ref(false)
 
 const settings = reactive({
   sampling: 'Block bootstrap',
@@ -38,28 +109,16 @@ const settings = reactive({
   seed: 42,
 })
 
-const summary = reactive<MonteCarloSummary>({
-  simulations: 10000,
-  sourceTrades: 52,
-  probabilityOfLoss: 0.2417,
-  probabilityOfRuin: 0.0005,
-  netProfit: {
-    minimum: -5689.55,
-    p05: -1629.8,
-    p50: 1198.97,
-    mean: 1239.01,
-    p95: 4202.59,
-    maximum: 10002.91,
-  },
-  drawdown: {
-    minimum: 2.39,
-    p05: 7.04,
-    p50: 13.69,
-    mean: 15.07,
-    p95: 27.97,
-    maximum: 56.9,
-  },
+const summary = reactive<MonteCarloSummary>(emptySummary())
+const fullDatasetSummary = reactive<MonteCarloSummary>(emptySummary())
+const evidence = reactive<EvidenceSummary>({
+  primary: 'none',
+  minimumSourceTrades: 30,
+  walkForwardWindows: 0,
+  outOfSampleTrades: 0,
+  fullDatasetTrades: 0,
 })
+const hasFullDatasetComparison = ref(false)
 
 const money = (value: number) =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
@@ -67,11 +126,113 @@ const money = (value: number) =>
 const percent = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`
 
 const drawdownVerdict = computed(() => {
+  if (summary.sourceTrades < evidence.minimumSourceTrades) return 'Insufficient trade evidence'
+  if (evidence.primary !== 'walk_forward_oos') return 'Re-run with walk-forward evidence'
   if (summary.probabilityOfRuin >= 0.05 || summary.drawdown.p95 >= 40)
     return 'Tail risk requires changes'
   if (summary.probabilityOfLoss >= 0.3 || summary.drawdown.p95 >= 25)
     return 'Promising, tail risk needs review'
   return 'Robust in this simulation'
+})
+
+const evidenceQuality = computed(() => {
+  const trades = evidence.primary === 'walk_forward_oos'
+    ? summary.sourceTrades
+    : (selectedCandidate.value?.evidencePreview?.outOfSampleTrades ?? 0)
+  if (!trades) return { label: 'Not simulated', tone: 'neutral' }
+  if (trades < evidence.minimumSourceTrades)
+    return { label: 'Insufficient sample', tone: 'danger' }
+  if (trades < 50) return { label: 'Limited OOS sample', tone: 'warning' }
+  return { label: 'Adequate OOS sample', tone: 'success' }
+})
+
+const displayedOutOfSampleTrades = computed(() =>
+  evidence.primary === 'walk_forward_oos'
+    ? summary.sourceTrades
+    : (selectedCandidate.value?.evidencePreview?.outOfSampleTrades ?? 0),
+)
+
+const displayedFullDatasetTrades = computed(() => {
+  if (hasFullDatasetComparison.value) return fullDatasetSummary.sourceTrades
+  if (evidence.primary === 'legacy_full_dataset') return summary.sourceTrades
+  return selectedCandidate.value?.evidencePreview?.fullDatasetTrades ?? 0
+})
+
+const displayedWalkForwardWindows = computed(() =>
+  evidence.walkForwardWindows
+    || selectedCandidate.value?.evidencePreview?.walkForwardWindows
+    || 0,
+)
+
+const hasInsufficientPreview = computed(() => {
+  const trades = selectedCandidate.value?.evidencePreview?.outOfSampleTrades
+  return typeof trades === 'number' && trades < evidence.minimumSourceTrades
+})
+
+const primaryEvidenceLabel = computed(() =>
+  evidence.primary === 'legacy_full_dataset' ? 'Legacy' : 'OOS',
+)
+
+const initialCapitalForChart = computed(() => selectedCandidate.value?.initialCapital ?? 10000)
+
+const equityY = (pnl: number) => {
+  const values = [
+    0,
+    summary.netProfit.minimum,
+    summary.netProfit.p05,
+    summary.netProfit.p50,
+    summary.netProfit.p95,
+    summary.netProfit.maximum,
+  ].map((value) => initialCapitalForChart.value + value)
+  const minimum = Math.min(...values)
+  const maximum = Math.max(...values)
+  const range = Math.max(maximum - minimum, 1)
+  return 252 - ((initialCapitalForChart.value + pnl - minimum) / range) * 220
+}
+
+const fanPath = (pnl: number) => {
+  const startY = equityY(0)
+  const endY = equityY(pnl)
+  return `M55 ${startY} C250 ${startY}, 520 ${endY}, 705 ${endY}`
+}
+
+const fanAreaPath = computed(() => {
+  const startY = equityY(0)
+  return `${fanPath(summary.netProfit.p95)} L705 ${equityY(summary.netProfit.p05)} C520 ${equityY(summary.netProfit.p05)}, 250 ${startY}, 55 ${startY} Z`
+})
+
+const distributionX = (value: number, distribution: Distribution) => {
+  const range = Math.max(distribution.maximum - distribution.minimum, 1e-9)
+  return 55 + ((value - distribution.minimum) / range) * 480
+}
+
+const histogramMax = (bins: HistogramBin[]) => Math.max(1, ...bins.map((bin) => bin.count))
+const histogramBarX = (bin: HistogramBin, distribution: Distribution) =>
+  distributionX(bin.lower_bound, distribution)
+const histogramBarWidth = (bin: HistogramBin, distribution: Distribution) =>
+  Math.max(1, distributionX(bin.upper_bound, distribution) - histogramBarX(bin, distribution) - 1)
+const histogramBarY = (bin: HistogramBin, bins: HistogramBin[]) =>
+  200 - (bin.count / histogramMax(bins)) * 150
+const histogramBarHeight = (bin: HistogramBin, bins: HistogramBin[]) =>
+  200 - histogramBarY(bin, bins)
+const distributionTicks = (distribution: Distribution) =>
+  Array.from({ length: 5 }, (_, index) =>
+    distribution.minimum + ((distribution.maximum - distribution.minimum) * index) / 4,
+  )
+
+const drawdownCdfPath = computed(() => {
+  const bins = summary.drawdownHistogram
+  const total = bins.reduce((sum, bin) => sum + bin.count, 0)
+  if (!bins.length || !total) return ''
+  let cumulative = 0
+  return bins
+    .map((bin, index) => {
+      cumulative += bin.count
+      const x = distributionX((bin.lower_bound + bin.upper_bound) / 2, summary.drawdown)
+      const y = 200 - (cumulative / total) * 150
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`
+    })
+    .join(' ')
 })
 
 const describeParameters = (parameters: Record<string, unknown>) => {
@@ -82,37 +243,84 @@ const describeParameters = (parameters: Record<string, unknown>) => {
   return `EMA ${ema} · ${source} · SL ${sl}% · TP ${tp}%`
 }
 
-const applyReport = (text: string, label: string) => {
-  const report = JSON.parse(text) as {
-    walk_forward_monte_carlo?: {
-      simulations?: number
-      source_trades?: number
-      probability_of_loss?: number
-      probability_of_ruin?: number
-      net_profit?: Distribution
-      max_drawdown_percent?: Distribution
-    }
-    monte_carlo?: Array<{
-      parameters?: { params?: Record<string, unknown> }
-    }>
-  }
+const applyMonteCarloResult = (
+  target: MonteCarloSummary,
+  result: MonteCarloReportResult,
+) => {
+  target.simulations = result.simulations ?? 0
+  target.sourceTrades = result.source_trades ?? 0
+  target.probabilityOfLoss = result.probability_of_loss ?? 0
+  target.probabilityOfRuin = result.probability_of_ruin ?? 0
+  Object.assign(target.netProfit, result.net_profit ?? emptyDistribution())
+  Object.assign(target.drawdown, result.max_drawdown_percent ?? emptyDistribution())
+  target.netProfitHistogram = result.net_profit_histogram ?? []
+  target.drawdownHistogram = result.max_drawdown_percent_histogram ?? []
+}
 
-  const result = report.walk_forward_monte_carlo
+const applyReport = (text: string, label: string) => {
+  const parsed = JSON.parse(text)
+  const report = unwrapResearchReport<{
+    monte_carlo?: MonteCarloReportResult | Array<{ parameters?: { params?: Record<string, unknown> } }>
+    full_dataset_monte_carlo?: MonteCarloReportResult | null
+    walk_forward_monte_carlo?: MonteCarloReportResult
+    evidence?: {
+      primary?: string
+      minimum_source_trades?: number
+      walk_forward_windows?: number
+      out_of_sample_trades?: number
+      full_dataset_trades?: number | null
+    }
+  }>(parsed)
+
+  const result = (Array.isArray(report.monte_carlo) ? undefined : report.monte_carlo) ?? report.walk_forward_monte_carlo
   if (!result?.net_profit || !result.max_drawdown_percent) {
     throw new Error('The file does not contain walk_forward_monte_carlo results.')
   }
 
-  summary.simulations = result.simulations ?? 0
-  summary.sourceTrades = result.source_trades ?? 0
-  summary.probabilityOfLoss = result.probability_of_loss ?? 0
-  summary.probabilityOfRuin = result.probability_of_ruin ?? 0
-  Object.assign(summary.netProfit, result.net_profit)
-  Object.assign(summary.drawdown, result.max_drawdown_percent)
+  applyMonteCarloResult(summary, result)
+  if (report.full_dataset_monte_carlo?.net_profit && report.full_dataset_monte_carlo.max_drawdown_percent) {
+    applyMonteCarloResult(fullDatasetSummary, report.full_dataset_monte_carlo)
+    hasFullDatasetComparison.value = true
+  } else {
+    applyMonteCarloResult(fullDatasetSummary, {})
+    hasFullDatasetComparison.value = false
+  }
+  evidence.primary = report.evidence?.primary ?? (
+    report.walk_forward_monte_carlo ? 'walk_forward_oos' : 'legacy_full_dataset'
+  )
+  evidence.minimumSourceTrades = report.evidence?.minimum_source_trades ?? 30
+  evidence.walkForwardWindows = report.evidence?.walk_forward_windows ?? 0
+  evidence.outOfSampleTrades = report.evidence?.out_of_sample_trades ?? summary.sourceTrades
+  evidence.fullDatasetTrades = report.evidence?.full_dataset_trades
+    ?? fullDatasetSummary.sourceTrades
 
-  const parameters = report.monte_carlo?.[0]?.parameters?.params
+  const config = parsed?.reproducibility?.config
+  if (config) {
+    settings.simulations = config.simulations ?? settings.simulations
+    settings.seed = config.seed ?? settings.seed
+    settings.skipProbability = (config.skip_probability ?? settings.skipProbability / 100) * 100
+    settings.pnlJitter = config.pnl_jitter_fraction ?? settings.pnlJitter
+    settings.extraCost = config.max_additional_cost_per_trade ?? settings.extraCost
+    settings.ruinThreshold = 100 - (config.ruin_equity_percent_of_initial ?? 100 - settings.ruinThreshold)
+    if (config.sampling?.mode === 'block_bootstrap') {
+      settings.sampling = 'Block bootstrap'
+      settings.blockSize = config.sampling.block_size ?? settings.blockSize
+    } else if (config.sampling?.mode === 'bootstrap') {
+      settings.sampling = 'Bootstrap'
+    } else if (config.sampling?.mode === 'permutation') {
+      settings.sampling = 'Permutation'
+    }
+  }
+
+  const parameters = Array.isArray(report.monte_carlo)
+    ? report.monte_carlo[0]?.parameters?.params
+    : undefined
   if (parameters) candidateDescription.value = describeParameters(parameters)
-  reportLabel.value = 'Imported report'
-  reportMessage.value = `${label} loaded successfully.`
+  reportLabel.value = label
+  reportMessage.value = evidence.primary === 'walk_forward_oos'
+    ? `${label} loaded. Walk-forward out-of-sample evidence is the primary analysis.`
+    : `${label} uses legacy full-dataset evidence. Run Monte Carlo again to generate the OOS comparison.`
+  activeReport.value = parsed
 }
 
 const openReportPicker = () => reportInput.value?.click()
@@ -124,7 +332,7 @@ const importReport = async (event: Event) => {
   try {
     const text = await file.text()
     applyReport(text, file.name)
-    sessionStorage.setItem('research-report', text)
+    sessionStorage.setItem('monte-carlo-report', text)
   } catch (error) {
     reportMessage.value = error instanceof Error ? error.message : 'Could not read the report.'
   } finally {
@@ -132,18 +340,94 @@ const importReport = async (event: Event) => {
   }
 }
 
-const prepareRun = () => {
-  reportMessage.value =
-    'Settings are ready. The next integration step sends them to the native deterministic Monte Carlo runner.'
+const prepareRun = async () => {
+  if (!selectedCandidate.value) {
+    reportMessage.value = 'Choose a candidate from Parameter Optimization first.'
+    return
+  }
+  if (!selectedCandidate.value.sourceResearchJobId) {
+    reportMessage.value = 'The imported candidate has no live source job. Re-run optimization before Monte Carlo.'
+    return
+  }
+  if (hasInsufficientPreview.value) {
+    reportMessage.value = `Walk-forward evidence has ${displayedOutOfSampleTrades.value} closed trades; at least ${evidence.minimumSourceTrades} are required. Re-run optimization with a longer dataset.`
+    return
+  }
+  isRunning.value = true
+  reportLabel.value = 'Running'
+  try {
+    const sampling =
+      settings.sampling === 'Block bootstrap'
+        ? { mode: 'block_bootstrap', block_size: settings.blockSize }
+        : { mode: settings.sampling.toLowerCase() }
+    const job = await createMonteCarloJob({
+      closedTradePnls: [],
+      initialCapital: selectedCandidate.value.initialCapital,
+      config: {
+        simulations: settings.simulations,
+        seed: settings.seed,
+        sampling,
+        skip_probability: settings.skipProbability / 100,
+        pnl_jitter_fraction: settings.pnlJitter,
+        max_additional_cost_per_trade: settings.extraCost,
+        ruin_equity_percent_of_initial: 100 - settings.ruinThreshold,
+      },
+      dataset: selectedCandidate.value.dataset,
+      candidate: selectedCandidate.value.candidate,
+      sourceResearchJobId: selectedCandidate.value.sourceResearchJobId,
+    })
+    activeJob.value = job
+    await waitForResearchJob(job.id, (progress) => {
+      activeJob.value = progress
+      reportMessage.value = progress.message
+    })
+    const report = await getResearchReport(job.id)
+    applyReport(JSON.stringify(report), 'Native Rust report')
+    activeReport.value = report
+    reportLabel.value = 'Native Rust report'
+    reportMessage.value = `Completed and saved as ${job.id}. Primary evidence: ${summary.sourceTrades} OOS trades across ${evidence.walkForwardWindows} windows; supplementary evidence: ${fullDatasetSummary.sourceTrades} full-dataset trades.`
+    sessionStorage.setItem('monte-carlo-report', JSON.stringify(report))
+  } catch (error) {
+    reportLabel.value = 'Failed'
+    reportMessage.value = error instanceof Error ? error.message : 'Monte Carlo failed.'
+  } finally {
+    isRunning.value = false
+  }
+}
+
+const exportReport = () => {
+  if (!activeReport.value) return
+  downloadResearchReport(activeReport.value, `${activeJob.value?.id ?? 'monte-carlo-report'}.json`)
 }
 
 onMounted(() => {
-  const cached = sessionStorage.getItem('research-report')
+  const selection = sessionStorage.getItem('selected-research-candidate')
+  if (selection) {
+    try {
+      selectedCandidate.value = JSON.parse(selection)
+      candidateDescription.value = selectedCandidate.value?.description ?? candidateDescription.value
+      reportLabel.value = 'Candidate selected'
+    } catch {
+      sessionStorage.removeItem('selected-research-candidate')
+    }
+  }
+  const cached = sessionStorage.getItem('monte-carlo-report')
   if (!cached) return
   try {
-    applyReport(cached, 'Imported optimization report')
+    const parsed = JSON.parse(cached)
+    const cachedSourceJobId = parsed?.reproducibility?.sourceResearchJobId
+    if (
+      selectedCandidate.value?.sourceResearchJobId
+      && cachedSourceJobId
+      && selectedCandidate.value.sourceResearchJobId !== cachedSourceJobId
+    ) {
+      sessionStorage.removeItem('monte-carlo-report')
+      reportMessage.value = 'The saved Monte Carlo report belongs to another optimization job. Run a fresh simulation for this candidate.'
+      return
+    }
+    applyReport(cached, 'Saved Monte Carlo report')
   } catch {
-    sessionStorage.removeItem('research-report')
+    sessionStorage.removeItem('monte-carlo-report')
   }
 })
 </script>
@@ -153,7 +437,7 @@ onMounted(() => {
     <header class="research-page-header">
       <div>
         <h1>Monte Carlo Robustness</h1>
-        <p>Stress the selected out-of-sample trade sequence and inspect tail risk.</p>
+        <p>Use walk-forward trades as primary evidence and compare them with the full dataset.</p>
       </div>
       <span class="research-status-badge">{{ reportLabel }}</span>
     </header>
@@ -166,7 +450,7 @@ onMounted(() => {
             <dl class="candidate-summary">
               <div>
                 <dt>Strategy</dt>
-                <dd>EMA / VWAP</dd>
+                <dd>{{ selectedCandidate?.strategy ?? 'No candidate selected' }}</dd>
               </div>
               <div>
                 <dt>Parameters</dt>
@@ -174,7 +458,16 @@ onMounted(() => {
               </div>
               <div>
                 <dt>Evidence</dt>
-                <dd>Walk-forward OOS · {{ summary.sourceTrades }} trades</dd>
+                <dd class="evidence-lines">
+                  <span>
+                    Walk-forward OOS · {{ displayedOutOfSampleTrades || 'not available' }} trades
+                    <template v-if="displayedWalkForwardWindows"> / {{ displayedWalkForwardWindows }} windows</template>
+                  </span>
+                  <span>Full selected dataset · {{ displayedFullDatasetTrades || 'not available' }} trades</span>
+                  <span class="evidence-quality" :class="`evidence-quality--${evidenceQuality.tone}`">
+                    {{ evidenceQuality.label }}
+                  </span>
+                </dd>
               </div>
             </dl>
             <div class="research-button-row" style="margin-top: 1rem">
@@ -262,8 +555,8 @@ onMounted(() => {
               <input id="simulation-seed" v-model.number="settings.seed" type="number" min="0" />
               <FieldTooltip label="Seed" text="Initial random seed. Reusing the same seed and settings reproduces the same simulation paths." />
             </div>
-            <button class="research-primary" type="button" @click="prepareRun">
-              Run Monte Carlo
+            <button class="research-primary" type="button" :disabled="isRunning || !selectedCandidate || hasInsufficientPreview" @click="prepareRun">
+              {{ isRunning ? 'Running Monte Carlo…' : 'Run Monte Carlo' }}
             </button>
             <input
               ref="reportInput"
@@ -275,6 +568,16 @@ onMounted(() => {
             <button class="research-secondary" type="button" @click="openReportPicker">
               Import report
             </button>
+            <button class="research-secondary" type="button" :disabled="!activeReport" @click="exportReport">
+              Export report
+            </button>
+            <div v-if="activeJob" class="research-summary-line">
+              <span>{{ activeJob.stage }}</span>
+              <span>{{ activeJob.completed }} / {{ activeJob.total }}</span>
+            </div>
+            <div v-if="activeJob" class="research-progress-track">
+              <div class="research-progress-bar" :style="{ width: `${activeJob.percent}%` }" />
+            </div>
             <div v-if="reportMessage" class="research-inline-notice">{{ reportMessage }}</div>
           </div>
         </section>
@@ -283,11 +586,11 @@ onMounted(() => {
       <div class="research-column">
         <div class="kpi-grid">
           <section class="research-card kpi-card">
-            <div class="kpi-label">Median Net P&amp;L</div>
+            <div class="kpi-label">{{ primaryEvidenceLabel }} Median Net P&amp;L</div>
             <div class="kpi-value metric-positive">+{{ money(summary.netProfit.p50) }} USDT</div>
           </section>
           <section class="research-card kpi-card">
-            <div class="kpi-label">5th percentile</div>
+            <div class="kpi-label">{{ primaryEvidenceLabel }} 5th percentile</div>
             <div
               class="kpi-value"
               :class="summary.netProfit.p05 < 0 ? 'metric-negative' : 'metric-positive'"
@@ -296,19 +599,46 @@ onMounted(() => {
             </div>
           </section>
           <section class="research-card kpi-card">
-            <div class="kpi-label">95th percentile</div>
+            <div class="kpi-label">{{ primaryEvidenceLabel }} 95th percentile</div>
             <div class="kpi-value metric-positive">+{{ money(summary.netProfit.p95) }} USDT</div>
           </section>
           <section class="research-card kpi-card">
-            <div class="kpi-label">Probability of loss</div>
+            <div class="kpi-label">{{ primaryEvidenceLabel }} Probability of loss</div>
             <div class="kpi-value">{{ percent(summary.probabilityOfLoss) }}</div>
           </section>
         </div>
 
+        <section v-if="summary.sourceTrades && evidence.primary === 'walk_forward_oos'" class="research-card evidence-comparison-card">
+          <h2 class="research-card-title">
+            Evidence Comparison <small>Walk-forward OOS is the decision basis</small>
+          </h2>
+          <div class="evidence-comparison-table">
+            <div class="evidence-comparison-row evidence-comparison-head">
+              <span>Evidence</span><span>Trades</span><span>Median P&amp;L</span><span>P05 P&amp;L</span><span>P95 DD</span><span>Loss probability</span>
+            </div>
+            <div class="evidence-comparison-row evidence-comparison-primary">
+              <strong>Walk-forward OOS · Primary</strong>
+              <span>{{ summary.sourceTrades }}</span>
+              <span>{{ money(summary.netProfit.p50) }} USDT</span>
+              <span>{{ money(summary.netProfit.p05) }} USDT</span>
+              <span>{{ summary.drawdown.p95.toFixed(1) }}%</span>
+              <span>{{ percent(summary.probabilityOfLoss) }}</span>
+            </div>
+            <div v-if="hasFullDatasetComparison" class="evidence-comparison-row">
+              <strong>Full dataset · Supplementary</strong>
+              <span>{{ fullDatasetSummary.sourceTrades }}</span>
+              <span>{{ money(fullDatasetSummary.netProfit.p50) }} USDT</span>
+              <span>{{ money(fullDatasetSummary.netProfit.p05) }} USDT</span>
+              <span>{{ fullDatasetSummary.drawdown.p95.toFixed(1) }}%</span>
+              <span>{{ percent(fullDatasetSummary.probabilityOfLoss) }}</span>
+            </div>
+          </div>
+        </section>
+
         <div class="monte-main-grid">
           <section class="research-card">
             <h2 class="research-card-title">
-              Equity Path Percentiles <small>Illustrative fan from summary percentiles</small>
+              {{ primaryEvidenceLabel }} Final Equity Percentiles <small>{{ summary.sourceTrades }} source trades</small>
             </h2>
             <div class="chart-frame">
               <svg viewBox="0 0 760 300" role="img" aria-label="Equity path percentile fan chart">
@@ -339,44 +669,30 @@ onMounted(() => {
                   />
                 </g>
                 <path
-                  d="M55 160 C170 128, 265 112, 380 79 S590 44,705 27 L705 229 C580 219,470 212,380 202 S170 179,55 160 Z"
+                  :d="fanAreaPath"
                   fill="url(#fan-gradient)"
                 />
                 <path
-                  d="M55 160 C190 139,300 123,420 99 S590 69,705 55"
+                  :d="fanPath(summary.netProfit.p95)"
                   fill="none"
                   stroke="#6fc4ff"
                   stroke-width="2.5"
                 />
                 <path
-                  d="M55 160 C190 150,300 142,420 127 S590 110,705 92"
-                  fill="none"
-                  stroke="#3199f7"
-                  stroke-width="2.5"
-                />
-                <path
-                  d="M55 160 C190 157,300 153,420 148 S590 137,705 126"
+                  :d="fanPath(summary.netProfit.p50)"
                   fill="none"
                   stroke="#49df8b"
                   stroke-width="3.5"
                 />
                 <path
-                  d="M55 160 C190 166,300 177,420 185 S590 200,705 207"
-                  fill="none"
-                  stroke="#8ba4bb"
-                  stroke-width="2.5"
-                />
-                <path
-                  d="M55 160 C190 177,300 195,420 208 S590 222,705 229"
+                  :d="fanPath(summary.netProfit.p05)"
                   fill="none"
                   stroke="#ff6574"
                   stroke-width="2.5"
                 />
-                <text x="713" y="59" class="chart-axis-label" fill="#6fc4ff">P95</text>
-                <text x="713" y="96" class="chart-axis-label" fill="#3199f7">P75</text>
-                <text x="713" y="130" class="chart-axis-label" fill="#49df8b">Median</text>
-                <text x="713" y="211" class="chart-axis-label" fill="#8ba4bb">P25</text>
-                <text x="713" y="233" class="chart-axis-label" fill="#ff6574">P05</text>
+                <text x="713" :y="equityY(summary.netProfit.p95) + 4" class="chart-axis-label" fill="#6fc4ff">P95</text>
+                <text x="713" :y="equityY(summary.netProfit.p50) + 4" class="chart-axis-label" fill="#49df8b">Median</text>
+                <text x="713" :y="equityY(summary.netProfit.p05) + 4" class="chart-axis-label" fill="#ff6574">P05</text>
                 <text x="380" y="287" text-anchor="middle" class="chart-axis-label">
                   Trade count
                 </text>
@@ -392,7 +708,7 @@ onMounted(() => {
           </section>
 
           <section class="research-card">
-            <h2 class="research-card-title">Risk Summary</h2>
+            <h2 class="research-card-title">{{ primaryEvidenceLabel }} Risk Summary</h2>
             <div class="research-card-body">
               <div class="risk-list">
                 <div class="risk-row">
@@ -423,109 +739,135 @@ onMounted(() => {
 
         <div class="monte-bottom-grid">
           <section class="research-card">
-            <h2 class="research-card-title">Final Net P&amp;L Distribution</h2>
-            <div class="chart-frame">
-              <svg viewBox="0 0 560 245" role="img" aria-label="Final net profit distribution">
-                <line x1="45" y1="206" x2="535" y2="206" class="chart-grid-line" />
-                <g fill="#469de8">
-                  <rect
-                    v-for="(height, index) in [
-                      8, 12, 18, 30, 45, 68, 92, 126, 158, 181, 196, 170, 142, 108, 76, 49, 31, 19,
-                      11, 6,
-                    ]"
-                    :key="index"
-                    :x="55 + index * 23"
-                    :y="206 - height"
-                    width="18"
-                    :height="height"
-                    rx="2"
-                  />
-                </g>
+            <h2 class="research-card-title">{{ primaryEvidenceLabel }} Final Net P&amp;L Distribution</h2>
+            <div v-if="summary.netProfitHistogram.length" class="chart-frame">
+              <svg viewBox="0 0 560 245" role="img" aria-label="Final net profit distribution histogram">
                 <line
-                  x1="172"
-                  y1="24"
-                  x2="172"
-                  y2="206"
+                  v-for="y in [50, 100, 150, 200]"
+                  :key="`net-y-${y}`"
+                  x1="55"
+                  :y1="y"
+                  x2="535"
+                  :y2="y"
+                  class="chart-grid-line"
+                />
+                <rect
+                  v-for="(bin, index) in summary.netProfitHistogram"
+                  :key="`net-bin-${index}`"
+                  :x="histogramBarX(bin, summary.netProfit)"
+                  :y="histogramBarY(bin, summary.netProfitHistogram)"
+                  :width="histogramBarWidth(bin, summary.netProfit)"
+                  :height="histogramBarHeight(bin, summary.netProfitHistogram)"
+                  fill="#469de8"
+                  fill-opacity="0.9"
+                />
+                <line
+                  v-if="summary.netProfit.minimum < 0 && summary.netProfit.maximum > 0"
+                  :x1="distributionX(0, summary.netProfit)"
+                  y1="35"
+                  :x2="distributionX(0, summary.netProfit)"
+                  y2="200"
+                  stroke="#dbe5ef"
+                  stroke-width="1.5"
+                  stroke-dasharray="5 5"
+                />
+                <line
+                  :x1="distributionX(summary.netProfit.p05, summary.netProfit)"
+                  y1="35"
+                  :x2="distributionX(summary.netProfit.p05, summary.netProfit)"
+                  y2="200"
                   stroke="#ff6574"
                   stroke-width="2"
                   stroke-dasharray="6 5"
                 />
                 <line
-                  x1="309"
-                  y1="24"
-                  x2="309"
-                  y2="206"
+                  :x1="distributionX(summary.netProfit.p50, summary.netProfit)"
+                  y1="35"
+                  :x2="distributionX(summary.netProfit.p50, summary.netProfit)"
+                  y2="200"
                   stroke="#49df8b"
                   stroke-width="2"
                   stroke-dasharray="6 5"
                 />
                 <line
-                  x1="442"
-                  y1="24"
-                  x2="442"
-                  y2="206"
+                  :x1="distributionX(summary.netProfit.p95, summary.netProfit)"
+                  y1="35"
+                  :x2="distributionX(summary.netProfit.p95, summary.netProfit)"
+                  y2="200"
                   stroke="#5faeff"
                   stroke-width="2"
                   stroke-dasharray="6 5"
                 />
-                <text x="172" y="17" text-anchor="middle" class="chart-axis-label">
+                <text :x="distributionX(summary.netProfit.p05, summary.netProfit)" y="17" text-anchor="middle" class="chart-axis-label">
                   P05 {{ money(summary.netProfit.p05) }}
                 </text>
-                <text x="309" y="17" text-anchor="middle" class="chart-axis-label">
+                <text :x="distributionX(summary.netProfit.p50, summary.netProfit)" y="30" text-anchor="middle" class="chart-axis-label" fill="#49df8b">
                   Median {{ money(summary.netProfit.p50) }}
                 </text>
-                <text x="442" y="17" text-anchor="middle" class="chart-axis-label">
+                <text :x="distributionX(summary.netProfit.p95, summary.netProfit)" y="17" text-anchor="middle" class="chart-axis-label">
                   P95 {{ money(summary.netProfit.p95) }}
                 </text>
+                <g v-for="tick in distributionTicks(summary.netProfit)" :key="`net-tick-${tick}`">
+                  <line :x1="distributionX(tick, summary.netProfit)" y1="200" :x2="distributionX(tick, summary.netProfit)" y2="205" stroke="#72869b" />
+                  <text :x="distributionX(tick, summary.netProfit)" y="218" text-anchor="middle" class="chart-axis-label">{{ money(tick) }}</text>
+                </g>
+                <text x="18" y="127" transform="rotate(-90 18 127)" text-anchor="middle" class="chart-axis-label">Frequency</text>
                 <text x="290" y="237" text-anchor="middle" class="chart-axis-label">
                   Net P&amp;L (USDT)
                 </text>
               </svg>
             </div>
+            <div v-else class="chart-data-notice">Run or import a new native report to show the simulated distribution.</div>
           </section>
 
           <section class="research-card">
-            <h2 class="research-card-title">Maximum Drawdown Distribution</h2>
-            <div class="chart-frame">
-              <svg viewBox="0 0 560 245" role="img" aria-label="Maximum drawdown distribution">
-                <line x1="45" y1="206" x2="535" y2="206" class="chart-grid-line" />
-                <g fill="#469de8">
-                  <rect
-                    v-for="(height, index) in [
-                      5, 11, 28, 61, 112, 166, 190, 174, 146, 113, 82, 57, 39, 27, 18, 12, 8, 5, 3,
-                      2,
-                    ]"
-                    :key="index"
-                    :x="55 + index * 23"
-                    :y="206 - height"
-                    width="18"
-                    :height="height"
-                    rx="2"
-                  />
-                </g>
-                <path
-                  d="M55 199 C135 191,165 167,206 126 S285 54,355 31 S450 18,520 16"
-                  fill="none"
-                  stroke="#e2eaf3"
-                  stroke-width="2.5"
-                />
+            <h2 class="research-card-title">{{ primaryEvidenceLabel }} Maximum Drawdown Distribution</h2>
+            <div v-if="summary.drawdownHistogram.length" class="chart-frame">
+              <svg viewBox="0 0 560 245" role="img" aria-label="Maximum drawdown distribution histogram">
                 <line
-                  x1="338"
-                  y1="23"
-                  x2="338"
-                  y2="206"
+                  v-for="y in [50, 100, 150, 200]"
+                  :key="`dd-y-${y}`"
+                  x1="55"
+                  :y1="y"
+                  x2="535"
+                  :y2="y"
+                  class="chart-grid-line"
+                />
+                <rect
+                  v-for="(bin, index) in summary.drawdownHistogram"
+                  :key="`dd-bin-${index}`"
+                  :x="histogramBarX(bin, summary.drawdown)"
+                  :y="histogramBarY(bin, summary.drawdownHistogram)"
+                  :width="histogramBarWidth(bin, summary.drawdown)"
+                  :height="histogramBarHeight(bin, summary.drawdownHistogram)"
+                  fill="#469de8"
+                  fill-opacity="0.9"
+                />
+                <path :d="drawdownCdfPath" fill="none" stroke="#edf4fc" stroke-width="2.5" />
+                <line
+                  :x1="distributionX(summary.drawdown.p95, summary.drawdown)"
+                  y1="30"
+                  :x2="distributionX(summary.drawdown.p95, summary.drawdown)"
+                  y2="200"
                   stroke="#ff6574"
                   stroke-width="2"
                   stroke-dasharray="6 5"
                 />
-                <text x="338" y="17" text-anchor="middle" class="chart-axis-label">
+                <text :x="distributionX(summary.drawdown.p95, summary.drawdown)" y="17" text-anchor="middle" class="chart-axis-label">
                   P95 {{ summary.drawdown.p95.toFixed(1) }}%
                 </text>
+                <g v-for="tick in distributionTicks(summary.drawdown)" :key="`dd-tick-${tick}`">
+                  <line :x1="distributionX(tick, summary.drawdown)" y1="200" :x2="distributionX(tick, summary.drawdown)" y2="205" stroke="#72869b" />
+                  <text :x="distributionX(tick, summary.drawdown)" y="218" text-anchor="middle" class="chart-axis-label">{{ tick.toFixed(1) }}%</text>
+                </g>
+                <text x="18" y="127" transform="rotate(-90 18 127)" text-anchor="middle" class="chart-axis-label">Frequency</text>
+                <text x="548" y="127" transform="rotate(90 548 127)" text-anchor="middle" class="chart-axis-label">Cumulative probability</text>
                 <text x="290" y="237" text-anchor="middle" class="chart-axis-label">
                   Maximum Drawdown (%)
                 </text>
               </svg>
             </div>
+            <div v-else class="chart-data-notice">Run or import a new native report to show the simulated distribution.</div>
           </section>
         </div>
       </div>

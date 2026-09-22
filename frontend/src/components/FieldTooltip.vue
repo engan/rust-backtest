@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useId } from 'vue'
+import { nextTick, onBeforeUnmount, ref, useId } from 'vue'
 
 defineProps<{
   label: string
@@ -7,19 +7,78 @@ defineProps<{
 }>()
 
 const tooltipId = `field-tooltip-${useId().replaceAll(':', '')}`
+const trigger = ref<HTMLButtonElement | null>(null)
+const content = ref<HTMLElement | null>(null)
+const visible = ref(false)
+const placement = ref<'top' | 'bottom'>('top')
+const tooltipStyle = ref<Record<string, string>>({})
+
+const positionTooltip = () => {
+  if (!trigger.value || !content.value) return
+  const margin = 16
+  const gap = 9
+  const anchor = trigger.value.getBoundingClientRect()
+  const popup = content.value.getBoundingClientRect()
+  const left = Math.min(
+    Math.max(margin, anchor.right - popup.width),
+    window.innerWidth - popup.width - margin,
+  )
+  let top = anchor.top - popup.height - gap
+  placement.value = 'top'
+  if (top < margin) {
+    top = anchor.bottom + gap
+    placement.value = 'bottom'
+  }
+  top = Math.min(Math.max(margin, top), window.innerHeight - popup.height - margin)
+  tooltipStyle.value = {
+    left: `${Math.round(left)}px`,
+    top: `${Math.round(top)}px`,
+  }
+}
+
+const showTooltip = async () => {
+  visible.value = true
+  await nextTick()
+  positionTooltip()
+  window.addEventListener('resize', positionTooltip)
+  window.addEventListener('scroll', positionTooltip, true)
+}
+
+const hideTooltip = () => {
+  visible.value = false
+  window.removeEventListener('resize', positionTooltip)
+  window.removeEventListener('scroll', positionTooltip, true)
+}
+
+onBeforeUnmount(hideTooltip)
 </script>
 
 <template>
   <span class="field-tooltip">
     <button
+      ref="trigger"
       class="field-tooltip-trigger"
       type="button"
       :aria-label="`Help: ${label}`"
       :aria-describedby="tooltipId"
+      @mouseenter="showTooltip"
+      @mouseleave="hideTooltip"
+      @focus="showTooltip"
+      @blur="hideTooltip"
     >
       i
     </button>
-    <span :id="tooltipId" class="field-tooltip-content" role="tooltip">{{ text }}</span>
+    <Teleport to="body">
+      <span
+        v-show="visible"
+        :id="tooltipId"
+        ref="content"
+        class="field-tooltip-content"
+        :class="`field-tooltip-content--${placement}`"
+        :style="tooltipStyle"
+        role="tooltip"
+      >{{ text }}</span>
+    </Teleport>
   </span>
 </template>
 
@@ -62,10 +121,8 @@ const tooltipId = `field-tooltip-${useId().replaceAll(':', '')}`
 }
 
 .field-tooltip-content {
-  position: absolute;
-  right: -4px;
-  bottom: calc(100% + 9px);
-  z-index: 50;
+  position: fixed;
+  z-index: 2147483000;
   width: max-content;
   max-width: min(320px, calc(100vw - 32px));
   padding: 0.58rem 0.68rem;
@@ -78,18 +135,13 @@ const tooltipId = `field-tooltip-${useId().replaceAll(':', '')}`
   font-size: 0.75rem;
   font-weight: 450;
   line-height: 1.42;
-  opacity: 0;
   pointer-events: none;
-  transform: translateY(3px);
-  transition:
-    opacity 0.12s ease,
-    transform 0.12s ease;
   white-space: normal;
 }
 
 .field-tooltip-content::after {
   position: absolute;
-  right: 7px;
+  right: 5px;
   top: 100%;
   width: 8px;
   height: 8px;
@@ -100,10 +152,11 @@ const tooltipId = `field-tooltip-${useId().replaceAll(':', '')}`
   transform: translateY(-4px) rotate(45deg);
 }
 
-.field-tooltip:hover .field-tooltip-content,
-.field-tooltip:focus-within .field-tooltip-content {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
+.field-tooltip-content--bottom::after {
+  top: -4px;
+  border: 0;
+  border-top: 1px solid #416175;
+  border-left: 1px solid #416175;
+  transform: rotate(45deg);
 }
 </style>

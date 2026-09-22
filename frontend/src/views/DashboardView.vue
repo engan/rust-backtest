@@ -551,38 +551,84 @@
             </div>
           </div>
         </section>
+
+        <section class="research-card">
+          <h2 class="research-card-title">Leverage &amp; Margin</h2>
+          <div class="research-card-body research-field-grid">
+            <div class="research-option-row">
+              <label class="backtest-check-row" for="enforce-margin">
+                <input id="enforce-margin" v-model="marginEnforcementEnabled" type="checkbox" />
+                <span>Simulate leverage &amp; margin calls</span>
+              </label>
+              <FieldTooltip label="Leverage and margin calls" text="When enabled, the engine enforces the long and short margin requirements and can partially or fully liquidate a position. When disabled, execution remains equivalent to TradingView leverage set to Infinity." />
+            </div>
+            <div class="research-field">
+              <label for="margin-long">Long margin</label>
+              <div class="field-with-unit">
+                <input
+                  id="margin-long"
+                  v-model.number="marginLongPercent"
+                  type="number"
+                  min="0"
+                  step="1"
+                /><span>%</span>
+              </div>
+              <FieldTooltip label="Long margin requirement" text="Required collateral for a long position. 100% is 1× leverage, 50% is 2×, 20% is 5×, and 0% is Infinity. It changes execution only when margin-call simulation is enabled." />
+            </div>
+            <div class="research-field">
+              <label for="margin-short">Short margin</label>
+              <div class="field-with-unit">
+                <input
+                  id="margin-short"
+                  v-model.number="marginShortPercent"
+                  type="number"
+                  min="0"
+                  step="1"
+                /><span>%</span>
+              </div>
+              <FieldTooltip label="Short margin requirement" text="Required collateral for a short position. 100% is 1× leverage, 50% is 2×, 20% is 5×, and 0% is Infinity. It changes execution only when margin-call simulation is enabled." />
+            </div>
+          </div>
+        </section>
       </div>
 
       <div class="backtest-column backtest-results-column">
         <div class="backtest-kpi-grid">
           <section class="research-card backtest-kpi">
             <span>Net P&amp;L</span>
-            <strong v-if="results" :class="formattedTotalPnl.class">{{
-              formattedTotalPnl.text
-            }}</strong>
+            <strong v-if="results" :class="formattedTotalPnl.class">
+              {{ formattedTotalPnl.amount }}
+              <small>({{ formattedTotalPnl.percent }})</small>
+            </strong>
             <strong v-else>—</strong>
           </section>
           <section class="research-card backtest-kpi">
             <span>Max drawdown</span>
-            <strong v-if="results" class="metric-negative"
-              >{{ results.summary.max_drawdown_percent.toFixed(2) }}%</strong
-            >
+            <strong v-if="results" class="metric-negative">
+              {{ results.summary.max_drawdown_amount.toFixed(2) }} {{ quoteCurrency }}
+              <small>({{ results.summary.max_drawdown_percent.toFixed(2) }}%)</small>
+            </strong>
             <strong v-else>—</strong>
           </section>
           <section class="research-card backtest-kpi">
-            <span>Profit factor</span>
-            <strong>{{ results ? results.summary.profit_factor.toFixed(2) : '—' }}</strong>
+            <span>Profitable trades</span>
+            <strong>{{ formattedProfitableTrades }}</strong>
           </section>
           <section class="research-card backtest-kpi">
-            <span>Trades</span>
-            <strong>{{ results ? results.summary.total_trades : '—' }}</strong>
+            <span>Profit factor</span>
+            <strong>{{ results ? results.summary.profit_factor.toFixed(3) : '—' }}</strong>
           </section>
         </div>
 
         <section class="research-card backtest-chart-card">
           <h2 class="research-card-title">
             Equity &amp; Drawdown
-            <small v-if="resultBehavior">{{ resultBehavior }}</small>
+            <RouterLink
+              v-if="results"
+              class="performance-analysis-link"
+              to="/performance"
+              @click="cacheBacktestAnalysis"
+            >↗ Performance analysis</RouterLink>
           </h2>
           <div v-if="results?.equity_curve?.length" class="backtest-chart-wrap">
             <PnlChart
@@ -805,11 +851,13 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
+import { RouterLink } from 'vue-router'
 import { useBacktest } from '@/composables/useBacktest'
 import { fetchSymbolFilters } from '@/services/binanceAPI'
 import PnlChart from '@/components/PnlChart.vue'
 import FieldTooltip from '@/components/FieldTooltip.vue'
 import { loadPreset, savePreset, parsePreset, type TvPreset } from '@/services/tvPreset.ts'
+import { saveBacktestAnalysis } from '@/services/backtestReport'
 
 // Importer ENUMs (verdier)
 import {
@@ -915,19 +963,21 @@ function normSignal(ev: TradeEvent | undefined): string {
     .toLowerCase()
 }
 
-// Side-tekst iht. TV-reglene (se over)
+// TradingView prefixes an order comment with the strategy order id (Buy/Sell),
+// which is also the direction of the open trade for close orders.
 function orderSide(ev: TradeEvent): 'Buy' | 'Sell' {
-  const isLong = ev.direction === 'long'
-  const isReversal = ev.event_type === 'Exit' && normSignal(ev) === 'reversal'
-  // Vanlig: følg posisjonsretningen; Reversal: inverter
-  const base = isLong ? 'Buy' : 'Sell'
-  return isReversal ? (isLong ? 'Sell' : 'Buy') : base
+  return ev.direction === 'long' ? 'Buy' : 'Sell'
 }
 
 // Bruk orderSide + fin tittel
 function signalLabel(ev: TradeEvent): string {
   const side = orderSide(ev)
   const key = normSignal(ev)
+
+  if (key === 'margincall') return 'Margin Call'
+  // Rust uses Reversal internally for an opposite-cross close. Pine reports
+  // that same exit using the strategy.close comment "Buy/Sell Close Opposite".
+  if (ev.event_type === 'Exit' && key === 'reversal') return `${side} Close Opposite`
 
   const TITLE: Record<string, string> = {
     // Entry
@@ -937,8 +987,8 @@ function signalLabel(ev: TradeEvent): string {
     flatr: 'FL ATR',
     // Exit
     slriskbased: 'SL Risk-Based',
-    slfixed: 'SL Fixed',
-    sltrailing: 'SL Trailing',
+    slfixed: 'SL Fixed %',
+    sltrailing: 'SL Trailing %',
     slcombined: 'SL Combined',
     tp: 'TP',
     maxdrawdownclose: 'Max Drawdown Close',
@@ -951,6 +1001,7 @@ function signalLabel(ev: TradeEvent): string {
     // Entry/Exit
     reversal: 'Reversal',
     closeopposite: 'Close Opposite',
+    margincall: 'Margin Call',
   }
 
   const reason = TITLE[key] ?? ''
@@ -1126,11 +1177,13 @@ const disableOrderSizeValue = computed(() => isRiskBased.value)
 const priceToTick = ref(false)
 const commissionPercent = ref(0.05)
 const slippageTicks = ref(2)
+const marginLongPercent = ref(100)
+const marginShortPercent = ref(100)
+const marginEnforcementEnabled = ref(false)
 
 // --- Resultat variabler ---
 const initialCapital = ref(10000)
 const results = ref<BacktestResult | null>(null)
-const resultBehavior = ref('')
 const quoteCurrency = ref('USDT')
 
 // Slutt = siste bar i equity-curve (når resultater finnes)
@@ -1173,7 +1226,6 @@ function clearPreset() {
 --------------------------------------------------------------------*/
 const runBacktest = async () => {
   results.value = null // Nullstill gamle resultater
-  resultBehavior.value = ''
   isLoading.value = true
 
   // Bestem quoteCurrency basert på symbol
@@ -1207,6 +1259,9 @@ const runBacktest = async () => {
       slippage_ticks: slippageTicks.value,
       tick_size: filters.tickSize, // 0.01 hos Binance for de fleste USDT-par
       step_size: filters.stepSize, // 0.001 hos Binance - Husk å legge til step_size i BacktestConfig-typen din også
+      enforce_margin: marginEnforcementEnabled.value,
+      margin_long_percent: marginLongPercent.value,
+      margin_short_percent: marginShortPercent.value,
     }
     // Kall riktig Rust-funksjon basert på valgt strategi
     if (selectedStrategy.value === 'smaCross') {
@@ -1221,10 +1276,6 @@ const runBacktest = async () => {
         params: runParams,
         priceToTick: priceToTick.value,
       })
-      resultBehavior.value =
-        runParams.behavior_mode === 'LegacySafeguards'
-          ? 'Legacy safeguards'
-          : (runParams.behavior_mode ?? 'Legacy safeguards')
     } else if (selectedStrategy.value === 'emaVwap') {
       const runParams = { ...emaVwapParams }
       results.value = await runEmaVwapBacktest({
@@ -1237,14 +1288,42 @@ const runBacktest = async () => {
         params: runParams,
         priceToTick: priceToTick.value,
       })
-      resultBehavior.value = runParams.behavior_mode ?? 'Improved'
     }
+    cacheBacktestAnalysis()
   } catch (error) {
     console.error('Failed to run backtest:', error)
     alert('An error occurred. Check the console for details.')
   } finally {
     isLoading.value = false
   }
+}
+
+const cacheBacktestAnalysis = () => {
+  if (!results.value) return
+  saveBacktestAnalysis({
+    version: 1,
+    capturedAt: new Date().toISOString(),
+    strategy: selectedStrategy.value,
+    strategyLabel: selectedStrategyLabel.value,
+    parameters:
+      selectedStrategy.value === 'smaCross' ? { ...smaParams } : { ...emaVwapParams },
+    market: {
+      symbol: symbol.value,
+      timeframe: timeframe.value,
+      dataLimit: dataLimitForFetch.value,
+      endBeforeUtc: endBeforeUtc.value || null,
+    },
+    execution: {
+      initialCapital: initialCapital.value,
+      commissionPercent: commissionPercent.value,
+      slippageTicks: slippageTicks.value,
+      quoteCurrency: quoteCurrency.value,
+      marginLongPercent: marginLongPercent.value,
+      marginShortPercent: marginShortPercent.value,
+      marginEnforcementEnabled: marginEnforcementEnabled.value,
+    },
+    results: results.value,
+  })
 }
 
 const exportBacktestReport = () => {
@@ -1264,6 +1343,9 @@ const exportBacktestReport = () => {
       commissionPercent: commissionPercent.value,
       slippageTicks: slippageTicks.value,
       priceToTick: priceToTick.value,
+      marginLongPercent: marginLongPercent.value,
+      marginShortPercent: marginShortPercent.value,
+      marginEnforcementEnabled: marginEnforcementEnabled.value,
     },
     parameters: selectedStrategy.value === 'smaCross' ? { ...smaParams } : { ...emaVwapParams },
     results: results.value,
@@ -1281,7 +1363,7 @@ const exportBacktestReport = () => {
    4.  KEY METRIC ØVERST (uendret)
 --------------------------------------------------------------------*/
 const formattedTotalPnl = computed(() => {
-  if (!results.value) return { text: '0.00 USDT', class: '' }
+  if (!results.value) return { amount: '0.00 USDT', percent: '0.00%', class: '' }
 
   const { net_profit, pnl_open, pnl_total } = results.value.summary
 
@@ -1295,11 +1377,16 @@ const formattedTotalPnl = computed(() => {
   const sign = pnl_total >= 0 ? '+' : ''
   const cls = pnl_total > 0 ? 'profit' : 'loss'
   return {
-    text:
-      `${sign}${pnl_total.toFixed(2)} ${quoteCurrency.value} ` +
-      `(${sign}${totalPerc.toFixed(2)}%)`,
+    amount: `${sign}${pnl_total.toFixed(2)} ${quoteCurrency.value}`,
+    percent: `${sign}${totalPerc.toFixed(2)}%`,
     class: cls,
   }
+})
+
+const formattedProfitableTrades = computed(() => {
+  if (!results.value || results.value.summary.total_trades === 0) return '—'
+  const { profitable_trades, total_trades } = results.value.summary
+  return `${((profitable_trades / total_trades) * 100).toFixed(2)}% (${profitable_trades})`
 })
 
 /* ------------------------------------------------------------------
@@ -2091,6 +2178,18 @@ tr > td:nth-child(4)  /* Date/Time */ {
   gap: 0.75rem;
 }
 
+.performance-analysis-link {
+  color: #58adff;
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.performance-analysis-link:hover {
+  color: #8bc7ff;
+  background: transparent;
+}
+
 .backtest-kpi {
   min-height: 84px;
   padding: 0.72rem 0.82rem;
@@ -2110,6 +2209,11 @@ tr > td:nth-child(4)  /* Date/Time */ {
   font-size: clamp(1.05rem, 1.35vw, 1.55rem);
   font-weight: 800;
   letter-spacing: -0.02em;
+}
+
+.backtest-kpi strong small {
+  font-size: 0.78em;
+  font-weight: 750;
 }
 
 .backtest-kpi strong.profit {
@@ -2255,7 +2359,7 @@ tr > td:nth-child(4)  /* Date/Time */ {
 
 .trade-log-dialog {
   display: flex;
-  width: 100%;
+  width: min(100%, 1660px);
   min-height: 100%;
   margin: 0 auto;
   padding: 0.9rem 1.25rem 2rem;

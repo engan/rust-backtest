@@ -94,7 +94,7 @@ import { RouterLink, RouterView } from 'vue-router'
 }
 
 #app-container {
-  width: 100%;
+  width: min(100%, 1660px);
   margin: 0 auto;
   padding: 0.9rem 1.25rem 2rem;
 }

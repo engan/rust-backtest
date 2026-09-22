@@ -387,7 +387,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.chart-container { position: relative; height: 400px; width: 100%; }
+.chart-container { position: relative; width: 100%; height: 100%; min-height: 360px; }
 
 /* TV-lignende tooltip */
 .tv-tooltip {
