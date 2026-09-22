@@ -1,257 +1,91 @@
-# High-Performance Trading Backtester (Rust/Wasm)
+# High-Performance Backtester
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.md)
+A Vue 3 and TypeScript interface for testing trading strategies against historical Binance Spot candles. The backtest runs in the browser through a bundled Rust/WebAssembly (Wasm) engine. Parameter optimization, walk-forward validation, and Monte Carlo analysis run as separate jobs in a local native Rust service.
 
-A web dashboard for **precise and fast** backtesting of trading strategies. The UI is built with **Vue 3 + TypeScript**, while the computation core runs in a separate **Rust/WebAssembly** (Wasm) engine that executes in the browser. Outputs and trade logs are designed for **parity with TradingView** (Strategy Tester). The frontend plots with **TradingView Lightweight Charts™** for clear and responsive visualization.
+The Rust strategy source and Pine scripts are maintained in the private `engan/rust-backtest-proprietary` repository. This public repository contains the frontend, a compiled Wasm build in `frontend/src/rust/pkg/`, and a Cloudflare Pages function for Binance data. Anyone who can load the browser app can also download its Wasm assets; bundling them does not conceal the strategy implementation.
 
-> **Note**: The core backtesting engine lives in a private repository: `engan/rust-backtest-proprietary`.
-> For convenience, the **compiled Wasm artifacts are vendored** into this public repo under
-> `frontend/src/rust/pkg/`, so you can run the app without access to the private source.
-> This README covers the public frontend and serverless functions.
+## Current functionality
 
----
+| Area | What works | Requirement |
+| --- | --- | --- |
+| Backtest | SMA Crossover and EMA / VWAP, configurable entries, exits, sizing, costs, safeguards, and optional leverage/margin-call simulation | Bundled Wasm and Binance candle data via `/binance-proxy` |
+| Results | Equity and drawdown chart, recent trades, full trade list, report export, and Performance Analysis | A completed backtest in the current browser session |
+| Optimize | Bounded parameter search, walk-forward validation, ranked candidates, report import/export | Private native Rust research server to start new jobs |
+| Monte Carlo | Simulations using a candidate's closed trades, distribution charts, risk summary, report import/export | Private native Rust research server to start new jobs; at least 30 closed trades in each required evidence set |
 
-## Table of Contents
+The Optimize and Monte Carlo pages are functional with the private local service. Their presence in the frontend does **not** mean a public job service is deployed. See [research workflow and evidence requirements](docs/research-ui.md).
 
-* [Features](#features)
-* [Architecture](#architecture)
-* [Data & Parity with TradingView](#data--parity-with-tradingview)
-* [Verified parity (screenshots)](#verified-parity-screenshots)
-* [Project Structure](#project-structure)
-* [Getting Started](#getting-started)
-* [Deployment (Cloudflare Pages)](#deployment-cloudflare-pages)
-* [Roadmap](#roadmap)
-* [License](#license)
+TradingView parity is a goal for matched strategy settings and data windows, not a guarantee for every symbol, timeframe, or configuration. Compare the same candles, cutoff, order settings, commission, slippage, and margin settings before evaluating differences. The chart uses [TradingView Lightweight Charts](https://tradingview.github.io/lightweight-charts/) for display; strategy calculations happen in Rust/Wasm.
 
----
+### Historical parity examples
 
-## Features
+These captures show earlier comparisons for a particular setup. They do not validate every current setting or future engine change.
 
-* **High performance**: Rust/Wasm engine runs strategies quickly and deterministically in the browser (built with `wasm-pack`).
-* **TradingView parity**: P&L, Max Drawdown, Profit Factor and all trade fields (Qty, Net P&L, Run-up/Drawdown, Cumulative) match TradingView for validated setups.
-* **Data source**: Historical klines from **Binance Spot API** (via a serverless proxy).
-* **Costs**: Commission (%) and Slippage (ticks) are configurable.
-* **Order-size modes**: % of equity, fixed qty/value, explicit qty (x gearing), and **Risk-Based** sizing.
-* **UI**: Vue 3 (Composition API) + TypeScript, Vite.
-* **Visualization**: Equity/PnL chart rendered with TradingView Lightweight Charts™.
-* **TV preset (optional)**: Paste JSON produced by a Pine indicator to override Bars LIVE / Since per timeframe for exact data-window matching.
+![Earlier equity and summary comparison with TradingView](https://github.com/user-attachments/assets/4de5b02b-c92d-4143-9b62-56496f0125c6)
 
----
+![Earlier trade-list comparison with TradingView](https://github.com/user-attachments/assets/19c43a09-bdcf-4d01-9511-7fa9ff679734)
 
-## Architecture
+## Run locally
 
-```mermaid
-flowchart LR
-  A["User (Browser)"] --> B["Vue 3 UI<br/>DashboardView.vue"]
-  B --> C["Composables<br/>(useBacktest.ts)"]
-  C --> D["Wasm pkg<br/>frontend/src/rust/pkg"]
-  D --> E["Rust Backtest Engine"]
-  C -- fetch --> F["Cloudflare Pages Function<br/>/binance-proxy"]
-  F --> G["Binance Spot API<br/>/api/v3/klines"]
-  B --> H["Lightweight Charts™"]
-```
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant V as Vue UI
-    participant K as Binance Proxy
-    participant W as Wasm (Rust)
-    participant L as Chart
-
-    U->>V: Click "Run Backtest"
-    V->>V: Compute Data Limit (auto or TV preset)
-    V->>K: GET /klines (symbol, interval, limit)
-    K-->>V: klines[]
-    V->>W: run_strategy(params, klines, costs, ticks/steps)
-    W-->>V: results {summary, trade_log, equity_curve}
-    V->>L: render equity & marks
-    V-->>U: Overview + List of trades (TV parity)
-```
-
----
-
-## Data & Parity with TradingView
-
-### Verified parity (screenshots)
-
-<figure>
-  <img src="https://github.com/user-attachments/assets/4de5b02b-c92d-4143-9b62-56496f0125c6"
-       alt="Equity curve parity between Rust/Wasm backtester and TradingView">
-  <figcaption><em>Equity & overview parity — The Rust/Wasm backtester (top) reproduces TradingView’s Strategy Tester (bottom) for the same symbol, timeframe and costs. Total P&amp;L, Max equity drawdown and Profit factor align exactly.</em></figcaption>
-  </figure>
-<br><br><br>
-<figure>
-  <img src="https://github.com/user-attachments/assets/19c43a09-bdcf-4d01-9511-7fa9ff679734"
-       alt="Trade-by-trade parity: list of trades comparison">
-  <figcaption><em>Trade-by-trade parity — Every row matches: side, price, position size, Net P&amp;L, Run-up (MFE), Drawdown (MAE) and Cumulative P&amp;L, down to the cent and percent rounding conventions.</em></figcaption>
-</figure>
-<br><br>
-
-### Data Limit (automatic)
-
-For the selected timeframe, **Bars LIVE** is computed from a fixed start (01‑Jan‑2024 UTC) to now. We add a **warmup** length for indicators before the first valid trade:
-
-```
-warmup     = max(slow_period, max(0, atr_length - 1)) + 2
-data_limit = bars_live + warmup + (optional 1 live bar)
-```
-
-This mirrors SMA/ATR warmup needs so that backtest entries align with TV’s signal availability.
-
-### TV Preset JSON (override)
-
-Turn on **Enable TV preset JSON** in the UI. When enabled and a JSON preset is pasted (generated by our helper Pine script), Bars LIVE and Since are overridden **per timeframe** to mirror TradingView exactly for your account/plan. The label in TV (Since) is converted to ISO time in the JSON.
-
-Lightweight Charts is purely for visualization; all calculations happen in Rust/Wasm.
-
----
-
-## Project Structure
-
-```text
-rust-backtest/
-├── README.md                       # This file
-├── package.json                    # (root) pnpm workspace / scripts
-├── pnpm-lock.yaml
-│
-├── frontend/                       # Vue 3 + Vite frontend
-│   ├── README.md
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.ts
-│   ├── env.d.ts / eslint / tsconfig*.json / vitest.config.ts
-│   │
-│   ├── public/                     # Static assets
-│   │   ├── _routes.json            # SPA routing hints (Pages)
-│   │   └── favicon.ico
-│   │
-│   └── src/
-│       ├── main.ts, App.vue
-│       ├── assets/ (css, illustrations)
-│       ├── components/
-│       │   ├── PnlChart.vue        # TradingView Lightweight Charts™
-│       │   └── EquityChart.vue     # (legacy ApexCharts – no longer used)
-│       ├── composables/
-│       │   ├── useBacktest.ts      # Calls Wasm and binds results to UI
-│       │   └── useKlines.ts        # Helpers for klines
-│       ├── router/
-│       ├── rust/pkg/               # Vendored Wasm artifacts (compiled engine)
-│       ├── services/
-│       │   ├── binanceAPI.ts       # REST calls + symbol filters (tick/step)
-│       │   └── tvPreset.ts         # Store/load TV preset in localStorage
-│       ├── types/common_strategy_types.ts
-│       └── views/DashboardView.vue # Main dashboard (Inputs, Properties, Results)
-│
-└── functions/                      # Cloudflare Pages Functions
-    ├── tsconfig.json
-    └── binance-proxy/[[path]].ts   # Proxy for Binance API (CORS, rate-limit)
-```
-
----
-
-## Getting Started
-
-### Prerequisites
-
-* Node.js + pnpm
-* Basic understanding of **Vue 3** and **Rust/Wasm**
-* No private access required — the compiled Wasm files are already included
-
-### 1) Clone this repository
+Use Node.js 22 and pnpm. The public frontend can run without the private Rust checkout:
 
 ```bash
 git clone https://github.com/engan/rust-backtest.git
-cd rust-backtest
+cd rust-backtest/frontend
+pnpm install
+pnpm run dev:vite
 ```
 
-### 2) Wasm engine
+Open the URL printed by Vite, normally `http://localhost:5173/`. Backtest uses the bundled Wasm and Vite's local `/binance-proxy` to reach Binance Spot. Internet access to Binance is needed to fetch candles and symbol filters. Optimize and Monte Carlo cannot start new jobs in this frontend-only mode, although previously exported reports can be imported.
 
-The compiled engine is **already present** here:
-```
-frontend/src/rust/pkg/
-├─ rust_backtest_proprietary_bg.wasm
-├─ rust_backtest_proprietary_bg.wasm.d.ts
-├─ rust_backtest_proprietary.d.ts
-└─ rust_backtest_proprietary.js
-```
-
-You can run the app as-is.  
-**Optional (advanced):** If you have access to the private engine and want to
-replace the vendored build with your own:
-
-Unix/macOS:
-```bash
-# from your private build folder
-wasm-pack build --target web
-cp ./pkg/*.{js,wasm,d.ts} ../rust-backtest/frontend/src/rust/pkg/
-```
-
-Windows (PowerShell):
-```powershell
-wasm-pack build --target web
-Copy-Item .\pkg\rust_backtest_proprietary_* ..\rust-backtest\frontend\src\rust\pkg\
-```
-
-> The vendored binaries are provided for runtime convenience only and may be
-> subject to additional licensing terms. Do not redistribute them outside this repository.
-
-### 3) Install dependencies
+To run research jobs locally, place the private `rust-backtest-proprietary` checkout beside this repository and install a working Rust/Cargo toolchain. From `rust-backtest/frontend`, run:
 
 ```bash
-# at the repository root
-pnpm install           
-cd frontend && pnpm install
-```
-
-### 4) Run locally
-
-```bash
-cd frontend
 pnpm run dev
 ```
 
-### 5) Build & preview
+That script starts Vite and the native research server together. Vite forwards `/research-api` to the server on `127.0.0.1:8787`. The server stores job reports in the private checkout; no database is required for this local single-user workflow.
+
+The frontend has a manual **Dataset** candle limit and an optional **End before (UTC)** cutoff. Binance responses are fetched in chunks when the requested limit exceeds the per-request limit. A TradingView preset JSON can be pasted into the optional preset control for supported data-window matching; it does not replace checking that the actual fetched candles and strategy settings agree.
+
+## Build and checks
+
+From `rust-backtest/frontend`:
 
 ```bash
-cd frontend
-pnpm build
-pnpm preview
+pnpm run type-check
+pnpm exec vitest run
+pnpm run build
 ```
 
-Open the URL printed by Vite, typically  
-`http://localhost:5173` for dev,  
-`http://localhost:4173` for preview. 
+The build writes static assets to `frontend/dist/`. `pnpm run preview` serves those assets, but it does not provide the Vite development proxies or the native research server. A working deployed backtest also needs a production `/binance-proxy` endpoint.
 
----
+## Repository layout
 
-## Deployment (Cloudflare Pages)
+```text
+rust-backtest/
+├── README.md
+├── docs/
+│   ├── research-ui.md                 # Research workflow and design references
+│   └── plans/                         # Plans that have not been activated
+├── frontend/
+│   ├── src/
+│   │   ├── components/PnlChart.vue    # Results chart
+│   │   ├── composables/useBacktest.ts  # Loads and invokes the Wasm engine
+│   │   ├── rust/pkg/                   # Bundled compiled engine
+│   │   ├── services/                   # Binance, reports, and research API client
+│   │   └── views/                      # Backtest, Optimize, Monte Carlo, Performance
+│   ├── vite.config.ts                  # Development-only API proxies
+│   └── package.json
+└── functions/binance-proxy/[[path]].ts # Cloudflare Pages function
+```
 
-* Vite outputs static files to `frontend/dist`.
-* SPA routing can be guided by `_routes.json`.
-* `functions/binance-proxy/[[path]].ts` is a Pages Function that forwards to Binance and sets CORS headers.
+The browser routes are `/`, `/optimize`, `/monte-carlo`, and `/performance`. The full trade list opens from the Backtest page. Directly opening a browser route on a static host requires an SPA fallback to `index.html`.
 
----
+## Deployment status
 
-## Roadmap
+This repository is not yet configured as a complete Vercel deployment. The Vite proxies only work during local development, and `functions/binance-proxy/[[path]].ts` is a Cloudflare Pages function, not a Vercel function. The local research service is also not a public API. The proposed steps for a first public version on `trade.neoweb.no` are in the [inactive publication plan](docs/plans/trade-neoweb-publication-plan-2026-09-22.md). That plan has not been executed.
 
-* **Parameter search / Grid search** (batch UI)
-* **Monte Carlo simulation** for robustness
-* **Walk-Forward Analysis** (periodic re-optimization)
-* **Additional strategies** (EMA/VWAP, DMI filter, etc.)
+## Licensing
 
----
-
-## License
-
-MIT – see [LICENSE.md](LICENSE.md).
-
----
-
-### Notes & References
-
-* TradingView Lightweight Charts™ documentation
-* Vue 3 docs (Composition API)
-* Binance Spot API – klines and symbol filters (tick/step)
-* Rust & WebAssembly – `wasm-pack`
-* Cloudflare Pages – `_routes.json` and Pages Functions
+There is currently no `LICENSE.md` in this repository. The licensing terms for the public frontend and the bundled proprietary Wasm build need to be clarified by the owner before a new public distribution channel is launched.

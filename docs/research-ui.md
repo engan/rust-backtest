@@ -1,8 +1,7 @@
-# Research UI concept
+# Research UI and native job workflow
 
-These mockups define the intended workflow for parameter optimization and
-Monte Carlo analysis. They are design references, not screenshots of an
-implemented feature.
+The mockups below remain visual references. The Optimize and Monte Carlo pages
+now run real jobs through the native Rust research server.
 
 ## Workflow
 
@@ -11,23 +10,42 @@ implemented feature.
    out-of-sample results as the primary evidence.
 3. Inspect stability, drawdown and the return/drawdown frontier before loading
    a candidate into the normal backtest view.
-4. Run Monte Carlo on the selected candidate's out-of-sample closed trades.
+4. Run Monte Carlo with the candidate's realized walk-forward out-of-sample
+   trades as the primary evidence. The same seeded simulation is also run on
+   the full-dataset closed trades as a supplementary comparison.
 5. Save the complete job definition, seed and summary report so a result can be
    reproduced later.
 
-The browser should edit and display research jobs. Large searches should run in
-the native Rust runner instead of blocking the browser or relying on JavaScript
-workers. A small local job API can expose progress and reports to the Vue
-frontend. For the initial single-user version, versioned JSON job and report
-files are sufficient; a database can be introduced when searchable multi-run
-history or multi-user ownership is needed.
+Monte Carlo requires at least 30 closed trades in both evidence sets. A shorter
+walk-forward sample is shown in the UI but cannot be simulated, because its
+percentiles and tail-risk estimates would be too unstable for a useful
+robustness decision. The report keeps the OOS and full-dataset summaries
+separate and records their trade counts and walk-forward window count.
+
+The browser edits and displays research jobs. Candidate searches, walk-forward
+validation, and Monte Carlo run in the native Rust runner instead of blocking
+the browser or relying on JavaScript workers. The local API exposes job status
+and report endpoints under `/research-api`. Vite proxies those requests to the
+loopback-only server on `127.0.0.1:8787`.
+
+Every job writes `request.json` and `report.json` below the private engine's
+ignored `research-results/<job-id>/` directory. Reports include the engine
+version, complete configuration, parameter grid, seed, dataset timestamps, bar
+count, and SHA-256 dataset fingerprint. They can also be exported or imported
+from the browser. A database is unnecessary for this single-user phase.
 
 Parameter values belong to each job definition. The optimization engine should
 receive a complete base configuration plus explicitly selected axes, so adding
 or changing a parameter does not require changing numeric constants in engine
 code.
 
-## Mockups
+## Local development
+
+`pnpm run dev` starts both Vite and the native research server. The private
+engine repository must be available as the sibling directory
+`../rust-backtest-proprietary`.
+
+## Design references
 
 ### Backtest
 
