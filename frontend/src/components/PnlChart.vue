@@ -204,8 +204,8 @@ function initChart() {
 
   chart = createChart(chartEl.value, {
     autoSize: true,
-    layout: { background: { color: '#2a2a2a' }, textColor: '#ccc' },
-    grid: { vertLines: { color: '#444' }, horzLines: { color: '#444' } },
+    layout: { background: { color: '#18222d' }, textColor: '#aebdce' },
+    grid: { vertLines: { color: '#2a3947' }, horzLines: { color: '#2a3947' } },
     rightPriceScale: {
       borderColor: '#71717a',
       scaleMargins: { top: 0.08, bottom: 0.30 },

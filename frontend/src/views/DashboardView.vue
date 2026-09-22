@@ -1,193 +1,202 @@
 <template>
-  <div class="dashboard-view">
-    <h1>High-Performance Backtester (Rust/WASM)</h1>
+  <div class="dashboard-view research-view">
+    <header class="backtest-page-header">
+      <div>
+        <h1>Backtest</h1>
+        <p>Configure, run, and inspect a TradingView-parity strategy test.</p>
+      </div>
+      <div class="backtest-header-actions">
+        <label class="parity-badge" :class="{ active: activeParams.parity_mode }" for="parityMode">
+          <input id="parityMode" v-model="activeParams.parity_mode" type="checkbox" />
+          <span>{{ activeParams.parity_mode ? '✓' : '○' }}</span>
+          TradingView parity
+        </label>
+        <button
+          class="backtest-run-button"
+          type="button"
+          :disabled="isLoading"
+          @click="runBacktest"
+        >
+          {{ isLoading ? 'Running backtest…' : '▶ Run backtest' }}
+        </button>
+      </div>
+    </header>
 
-    <div class="control-panel">
-      <!-- <h2>Simulation Controls</h2> -->
-
-      <!-- ======================= -->
-      <!--   TO-KOLONNE LAYOUT     -->
-      <!-- ======================= -->
-      <div class="controls-grid">
-        <!-- VENSTRE: INPUTS -->
-        <fieldset class="col-card">
-          <legend>Inputs</legend>
-
-          <!-- Strategy signal -->
-          <section v-if="selectedStrategy === 'smaCross'" class="group">
-            <div class="group-title">SMA Crossover</div>
-            <div class="row">
-              <label for="sma_fast">Fast Period:</label>
-              <input id="sma_fast" type="number" v-model.number="smaParams.fast_period" />
-            </div>
-            <div class="row">
-              <label for="sma_slow">Slow Period:</label>
-              <input id="sma_slow" type="number" v-model.number="smaParams.slow_period" />
-            </div>
-          </section>
-
-          <section v-else class="group">
-            <div class="group-title">Exponential Moving Averages</div>
-            <div class="row">
-              <label for="ema_length">EMA Length:</label>
-              <input
-                id="ema_length"
-                type="number"
-                min="1"
-                v-model.number="emaVwapParams.ema_length"
-              />
-              <span class="tip" tabindex="0"
-                >ⓘ<span class="tip-content">
-                  Length of the exponential moving average in chart bars. Default: 122.
-                </span></span
-              >
-            </div>
-            <div class="row">
-              <label for="ema_source">EMA Source:</label>
-              <select id="ema_source" v-model="emaVwapParams.ema_source">
-                <option v-for="source in Object.values(EmaSource)" :key="source" :value="source">
-                  {{ source }}
-                </option>
+    <div class="backtest-layout">
+      <div class="backtest-column">
+        <section class="research-card">
+          <h2 class="research-card-title">Strategy &amp; Market</h2>
+          <div class="research-card-body research-field-grid">
+            <div class="research-field">
+              <label for="strategy">Strategy</label>
+              <select id="strategy" v-model="selectedStrategy">
+                <option value="smaCross">SMA Crossover</option>
+                <option value="emaVwap">EMA / VWAP</option>
               </select>
             </div>
-
-            <div class="group-title subgroup-title">VWAP Settings</div>
-            <div class="row">
-              <label for="vwap_anchor">VWAP Anchor Period:</label>
-              <select id="vwap_anchor" v-model="emaVwapParams.vwap_anchor_period">
-                <option
-                  v-for="anchor in Object.values(VwapAnchorPeriod)"
-                  :key="anchor"
-                  :value="anchor"
-                >
-                  {{ anchor }}
-                </option>
+            <div class="research-field">
+              <label for="symbol">Symbol</label>
+              <input id="symbol" v-model="symbol" type="text" />
+            </div>
+            <div class="research-field">
+              <label for="timeframe">Timeframe</label>
+              <select id="timeframe" v-model="timeframe">
+                <option v-for="iv in BINANCE_INTERVALS" :key="iv" :value="iv">{{ iv }}</option>
               </select>
             </div>
-            <div class="row">
-              <label for="vwap_source">VWAP Source:</label>
-              <select id="vwap_source" v-model="emaVwapParams.vwap_source">
-                <option v-for="source in Object.values(EmaSource)" :key="source" :value="source">
-                  {{ source }}
-                </option>
-              </select>
+            <div class="research-field">
+              <label for="limit">Dataset</label>
+              <input id="limit" v-model.number="dataLimitForFetch" type="number" min="1" />
             </div>
-          </section>
-
-          <!-- Trading Direction -->
-          <section class="group">
-            <div class="group-title">Long and/or Short</div>
-
-            <div class="row">
-              <label for="sma_trade_dir">Trading Direction:</label>
-              <select id="sma_trade_dir" v-model="activeParams.trade_direction">
+            <div class="research-field">
+              <label for="end-before">End before (UTC)</label>
+              <input id="end-before" v-model="endBeforeUtc" type="datetime-local" />
+            </div>
+            <div class="research-field">
+              <label for="trade-direction">Trading direction</label>
+              <select id="trade-direction" v-model="activeParams.trade_direction">
                 <option :value="TradeDirectionFilter.Both">Both</option>
                 <option :value="TradeDirectionFilter.Long">Long</option>
                 <option :value="TradeDirectionFilter.Short">Short</option>
               </select>
-
-              <!-- lite info-ikon -->
-              <span class="tip" tabindex="0" style="margin-left: 6px">
-                ⓘ
-                <span class="tip-content">
-                  <b>Default: {{ selectedStrategy === 'emaVwap' ? 'Long' : 'Both' }}.</b><br />
-                  - <b>Both:</b> Allows both long and short trades<br />
-                  - <b>Long:</b> Only long trades<br />
-                  - <b>Short:</b> Only short trades
-                </span>
-              </span>
             </div>
-          </section>
 
-          <!-- Fashionably Late Trade Mode -->
-          <section class="group">
-            <div class="group-title">Fashionably Late Trade</div>
-            <div class="row">
-              <label for="fl_mode">Fashionably Late Trade:</label>
+            <div v-if="presetEnabled" class="preset-card-row">
+              <label for="tvpreset">TradingView preset JSON</label>
+              <textarea id="tvpreset" rows="3" @paste.prevent="onPastePreset($event)" />
+              <div class="research-button-row">
+                <button class="research-secondary" type="button" @click="showPreset">
+                  Show preset
+                </button>
+                <button class="research-secondary" type="button" @click="clearPreset">
+                  Clear preset
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="research-card">
+          <h2 class="research-card-title">Signal &amp; Entry</h2>
+          <div class="research-card-body research-field-grid">
+            <template v-if="selectedStrategy === 'smaCross'">
+              <div class="research-field">
+                <label for="sma_fast">Fast SMA period</label>
+                <input id="sma_fast" v-model.number="smaParams.fast_period" type="number" min="1" />
+              </div>
+              <div class="research-field">
+                <label for="sma_slow">Slow SMA period</label>
+                <input id="sma_slow" v-model.number="smaParams.slow_period" type="number" min="1" />
+              </div>
+            </template>
+
+            <template v-else>
+              <div class="research-field">
+                <label for="ema_length">EMA length</label>
+                <input
+                  id="ema_length"
+                  v-model.number="emaVwapParams.ema_length"
+                  type="number"
+                  min="1"
+                />
+              </div>
+              <div class="research-field">
+                <label for="ema_source">EMA source</label>
+                <select id="ema_source" v-model="emaVwapParams.ema_source">
+                  <option v-for="source in Object.values(EmaSource)" :key="source" :value="source">
+                    {{ source }}
+                  </option>
+                </select>
+              </div>
+              <div class="research-field">
+                <label for="vwap_anchor">VWAP anchor</label>
+                <select id="vwap_anchor" v-model="emaVwapParams.vwap_anchor_period">
+                  <option
+                    v-for="anchor in Object.values(VwapAnchorPeriod)"
+                    :key="anchor"
+                    :value="anchor"
+                  >
+                    {{ anchor }}
+                  </option>
+                </select>
+              </div>
+              <div class="research-field">
+                <label for="vwap_source">VWAP source</label>
+                <select id="vwap_source" v-model="emaVwapParams.vwap_source">
+                  <option v-for="source in Object.values(EmaSource)" :key="source" :value="source">
+                    {{ source }}
+                  </option>
+                </select>
+              </div>
+            </template>
+
+            <div class="research-divider" />
+
+            <div class="research-field">
+              <label for="fl_mode">Fashionably Late</label>
               <select id="fl_mode" v-model="activeParams.fashionably_late_mode">
                 <option :value="FashionablyLateMode.Off">Off</option>
                 <option :value="FashionablyLateMode.OnClose">On Close</option>
-                <option :value="FashionablyLateMode.OnHighLow">On High/Low</option>
+                <option :value="FashionablyLateMode.OnHighLow">On High / Low</option>
                 <option :value="FashionablyLateMode.Atr">ATR</option>
               </select>
-              <span class="tip" tabindex="0" style="margin-left: 6px"
-                >ⓘ
-                <span class="tip-content">
-                  Arms a breakout level on the crossover bar and only enters once price breaches it
-                  on a later bar (orders fill next bar open — TV model). “ATR” activates gating only
-                  when ATR[1] &gt; threshold.
-                </span>
-              </span>
             </div>
-            <div class="row">
-              <label for="fl_atr">ATR Threshold (absolute):</label>
+            <div v-if="isImproved" class="research-field">
+              <label for="atr_units">ATR threshold units</label>
+              <select id="atr_units" v-model="activeParams.atr_threshold_percent">
+                <option :value="false">Absolute</option>
+                <option :value="true">Percent of price</option>
+              </select>
+            </div>
+            <div class="research-field">
+              <label :for="activeParams.atr_threshold_percent ? 'atr_percent' : 'fl_atr'"
+                >ATR threshold</label
+              >
               <input
-                id="fl_atr"
+                v-if="isImproved && activeParams.atr_threshold_percent"
+                id="atr_percent"
+                v-model.number="activeParams.atr_threshold_fl_percent"
                 type="number"
+                min="0"
                 step="0.1"
+              />
+              <input
+                v-else
+                id="fl_atr"
                 v-model.number="activeParams.atr_threshold_fl"
-                :disabled="isImproved && activeParams.atr_threshold_percent"
+                type="number"
+                min="0"
+                step="0.1"
               />
             </div>
-            <template v-if="isImproved">
-              <div class="row">
-                <label for="atr_units">ATR threshold units:</label>
-                <select id="atr_units" v-model="activeParams.atr_threshold_percent">
-                  <option :value="false">Absolute (legacy)</option>
-                  <option :value="true">Percent of price</option>
-                </select>
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">
-                    Percent uses 100 × ATR[1] / close[1] on the signal bar. This only changes the
-                    Fashionably Late gate, not stop distances or position sizing.
-                  </span></span
-                >
-              </div>
-              <div v-if="activeParams.atr_threshold_percent" class="row">
-                <label for="atr_percent">ATR Threshold (%):</label>
-                <input
-                  id="atr_percent"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  v-model.number="activeParams.atr_threshold_fl_percent"
-                />
-              </div>
-              <div class="row row-checkbox">
-                <input id="reset_fl" type="checkbox" v-model="activeParams.reset_fl_on_opposite" />
-                <label for="reset_fl" class="inline-label">Cancel FL on opposite crossover</label>
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">
-                    Cancels a pending breakout when the opposite cross occurs, including crosses
-                    outside the selected trading direction.
-                  </span></span
-                >
-              </div>
-              <div class="row">
-                <label for="fl_expiry">Maximum FL wait (bars):</label>
+            <label v-if="isImproved" class="backtest-check-row" for="reset_fl">
+              <input id="reset_fl" v-model="activeParams.reset_fl_on_opposite" type="checkbox" />
+              <span>Cancel on opposite cross</span>
+            </label>
+            <div v-if="isImproved" class="research-field">
+              <label for="fl_expiry">Maximum wait</label>
+              <div class="field-with-unit">
                 <input
                   id="fl_expiry"
+                  v-model.number="activeParams.fl_expiry_bars"
                   type="number"
                   min="0"
                   step="1"
-                  v-model.number="activeParams.fl_expiry_bars"
                 />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">
-                    Zero means unlimited. A signal can trigger on the next N bars, never its own
-                    arming bar. All pending signals are cleared on pause and restart.
-                  </span></span
-                >
+                <span>bars</span>
               </div>
-            </template>
-          </section>
+            </div>
+          </div>
+        </section>
+      </div>
 
-          <!-- SL/TP -->
-          <section class="group">
-            <div class="group-title">Stop-Loss &amp; Take-Profit</div>
-            <div class="row">
-              <label for="sma_sl_tp_method">SL/TP Method:</label>
-              <select id="sma_sl_tp_method" v-model="activeParams.sl_tp_method">
+      <div class="backtest-column">
+        <section class="research-card">
+          <h2 class="research-card-title">Risk &amp; Exits</h2>
+          <div class="research-card-body research-field-grid">
+            <div class="research-field">
+              <label for="sl-tp-method">SL/TP method</label>
+              <select id="sl-tp-method" v-model="activeParams.sl_tp_method">
                 <option :value="SlTpMethod.RiskBased">RiskBased</option>
                 <option :value="SlTpMethod.FixedPercent">Fixed %</option>
                 <option :value="SlTpMethod.TrailingPercent">Trailing %</option>
@@ -195,726 +204,552 @@
               </select>
             </div>
 
-            <!-- RB parametre -->
-            <div v-if="activeParams.sl_tp_method === SlTpMethod.RiskBased" class="method-rows">
-              <div class="row">
-                <label for="sma_rr">Reward/Risk Ratio:</label>
+            <template v-if="activeParams.sl_tp_method === SlTpMethod.RiskBased">
+              <div class="research-field">
+                <label for="reward-risk">Reward / risk</label>
                 <input
-                  id="sma_rr"
-                  type="number"
-                  step="0.1"
+                  id="reward-risk"
                   v-model.number="activeParams.reward_mult_rb"
+                  type="number"
+                  step="0.1"
                 />
               </div>
-              <div class="row">
-                <label for="sma_atr_mult">R/R ATR Multiplier SL:</label>
+              <div class="research-field">
+                <label for="atr-multiplier">ATR multiplier SL</label>
                 <input
-                  id="sma_atr_mult"
-                  type="number"
-                  step="0.1"
+                  id="atr-multiplier"
                   v-model.number="activeParams.atr_mult_rb"
-                />
-              </div>
-            </div>
-
-            <!-- Fixed -->
-            <div v-if="activeParams.sl_tp_method === SlTpMethod.FixedPercent" class="method-rows">
-              <div class="row">
-                <label>Fixed SL %:</label
-                ><input type="number" step="0.1" v-model.number="activeParams.fixed_sl_perc" />
-              </div>
-              <div class="row">
-                <label>Fixed TP %:</label
-                ><input type="number" step="0.1" v-model.number="activeParams.fixed_tp_perc" />
-              </div>
-            </div>
-
-            <!-- Trailing -->
-            <div v-if="activeParams.sl_tp_method === SlTpMethod.TrailingPercent" class="method-rows">
-              <div class="row">
-                <label>Trailing SL %:</label
-                ><input type="number" step="0.1" v-model.number="activeParams.trailing_sl_perc" />
-              </div>
-              <div class="row">
-                <label>Static TP %:</label
-                ><input
                   type="number"
                   step="0.1"
-                  v-model.number="activeParams.fixed_tp_for_trailing_perc"
                 />
               </div>
-            </div>
+            </template>
 
-            <!-- Combined -->
-            <div v-if="activeParams.sl_tp_method === SlTpMethod.Combined" class="method-rows">
-              <div class="row">
-                <label>Fixed SL %:</label
-                ><input type="number" step="0.1" v-model.number="activeParams.fixed_sl_perc" />
+            <template v-if="activeParams.sl_tp_method === SlTpMethod.FixedPercent">
+              <div class="research-field">
+                <label for="fixed-sl">Fixed SL</label>
+                <div class="field-with-unit">
+                  <input
+                    id="fixed-sl"
+                    v-model.number="activeParams.fixed_sl_perc"
+                    type="number"
+                    step="0.1"
+                  /><span>%</span>
+                </div>
               </div>
-              <div class="row">
-                <label>Trailing SL %:</label
-                ><input type="number" step="0.1" v-model.number="activeParams.trailing_sl_perc" />
+              <div class="research-field">
+                <label for="fixed-tp">Fixed TP</label>
+                <div class="field-with-unit">
+                  <input
+                    id="fixed-tp"
+                    v-model.number="activeParams.fixed_tp_perc"
+                    type="number"
+                    step="0.1"
+                  /><span>%</span>
+                </div>
               </div>
-              <div class="row">
-                <label>Static TP %:</label
-                ><input
-                  type="number"
-                  step="0.1"
-                  v-model.number="activeParams.fixed_tp_for_trailing_perc"
-                />
+            </template>
+
+            <template
+              v-if="
+                activeParams.sl_tp_method === SlTpMethod.TrailingPercent ||
+                activeParams.sl_tp_method === SlTpMethod.Combined
+              "
+            >
+              <div v-if="activeParams.sl_tp_method === SlTpMethod.Combined" class="research-field">
+                <label for="combined-fixed-sl">Fixed SL</label>
+                <div class="field-with-unit">
+                  <input
+                    id="combined-fixed-sl"
+                    v-model.number="activeParams.fixed_sl_perc"
+                    type="number"
+                    step="0.1"
+                  /><span>%</span>
+                </div>
               </div>
-            </div>
-          </section>
+              <div class="research-field">
+                <label for="trailing-sl">Trailing SL</label>
+                <div class="field-with-unit">
+                  <input
+                    id="trailing-sl"
+                    v-model.number="activeParams.trailing_sl_perc"
+                    type="number"
+                    step="0.1"
+                  /><span>%</span>
+                </div>
+              </div>
+              <div class="research-field">
+                <label for="static-tp">Static TP</label>
+                <div class="field-with-unit">
+                  <input
+                    id="static-tp"
+                    v-model.number="activeParams.fixed_tp_for_trailing_perc"
+                    type="number"
+                    step="0.1"
+                  /><span>%</span>
+                </div>
+              </div>
+            </template>
 
-          <!-- Risk & Position Sizing (RB + MODE 4) -->
-          <section class="group">
-            <div class="group-title">Risk &amp; Position Sizing</div>
+            <div class="research-divider" />
 
-            <!-- Kun for Risk-Based -->
-            <div class="row">
-              <label for="sma_atr_len">ATR Length:</label>
-              <input id="sma_atr_len" type="number" v-model.number="activeParams.atr_length" />
-            </div>
-
-            <!-- Alltid synlig -->
-            <div class="row">
-              <label for="sma_risk_gearing">Risk Gearing (x):</label>
-              <select id="sma_risk_gearing" v-model.number="activeParams.risk_gearing">
-                <option v-for="n in [1, 2, 3, 4, 5]" :key="n" :value="n">{{ n }}</option>
-              </select>
-            </div>
-
-            <!-- Kun for Risk-Based -->
-            <div class="row" v-if="isRiskBased">
-              <label for="sma_risk_perc">Risk per Trade %:</label>
+            <div class="research-field">
+              <label for="atr-length">ATR length</label>
               <input
-                id="sma_risk_perc"
+                id="atr-length"
+                v-model.number="activeParams.atr_length"
                 type="number"
-                step="0.1"
-                v-model.number="activeParams.risk_perc"
+                min="1"
               />
             </div>
-          </section>
+            <div class="research-field">
+              <label for="risk-gearing">Position gearing</label>
+              <select id="risk-gearing" v-model.number="activeParams.risk_gearing">
+                <option v-for="n in [1, 2, 3, 4, 5]" :key="n" :value="n">{{ n }}×</option>
+              </select>
+            </div>
+            <div v-if="isRiskBased" class="research-field">
+              <label for="risk-percent">Risk per trade</label>
+              <div class="field-with-unit">
+                <input
+                  id="risk-percent"
+                  v-model.number="activeParams.risk_perc"
+                  type="number"
+                  min="0"
+                  step="0.1"
+                /><span>%</span>
+              </div>
+            </div>
+            <div class="research-field">
+              <label for="order-size-value">Order size</label>
+              <div class="compound-control">
+                <input
+                  id="order-size-value"
+                  v-model.number="activeParams.order_size_value"
+                  type="number"
+                  :disabled="disableOrderSizeValue"
+                />
+                <select
+                  v-model="activeParams.order_size_mode"
+                  :disabled="isRiskBased"
+                  aria-label="Order size unit"
+                >
+                  <option :value="OrderSizeMode.PercentOfEquity">% equity</option>
+                  <option :value="OrderSizeMode.FixedQuantity">Quantity</option>
+                  <option :value="OrderSizeMode.FixedValue">USDT</option>
+                </select>
+              </div>
+            </div>
+            <div class="research-field">
+              <label for="initial-capital">Initial capital</label>
+              <div class="field-with-unit">
+                <input
+                  id="initial-capital"
+                  v-model.number="initialCapital"
+                  type="number"
+                  min="0"
+                /><span>USDT</span>
+              </div>
+            </div>
+          </div>
+        </section>
 
-          <section class="group">
-            <div class="group-title">Risk Safeguards and Limits</div>
-            <fieldset class="safeguard-fields">
-              <div class="row row-checkbox">
+        <section class="research-card">
+          <h2 class="research-card-title">Safeguards</h2>
+          <div class="research-card-body research-field-grid">
+            <div class="safeguard-line">
+              <label class="backtest-check-row" for="enable_max_drawdown">
                 <input
                   id="enable_max_drawdown"
-                  type="checkbox"
                   v-model="activeParams.enable_max_drawdown"
+                  type="checkbox"
                 />
-                <label for="enable_max_drawdown" class="inline-label">
-                  Enable Maximum Drawdown Control
-                </label>
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content"
-                    >Stops new entries and closes at the next bar open when drawdown reaches the
-                    limit. Improved resumes after cooldown and ADX confirmation, then resets the
-                    drawdown reference to current equity. This is not a guaranteed loss cap.</span
-                  ></span
-                >
-              </div>
-              <div class="row">
-                <label for="max_drawdown_perc">Maximum Drawdown (%):</label>
+                <span>Maximum drawdown</span>
+              </label>
+              <div class="compact-value">
                 <input
-                  id="max_drawdown_perc"
-                  type="number"
-                  min="0"
-                  step="0.1"
                   v-model.number="activeParams.max_drawdown_perc"
-                />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content"
-                    >Maximum allowed drawdown percentage before trading stops.</span
-                  ></span
-                >
-              </div>
-
-              <div class="row row-checkbox">
-                <input
-                  id="enable_max_consecutive_losses"
-                  type="checkbox"
-                  v-model="activeParams.enable_max_consecutive_losses"
-                />
-                <label for="enable_max_consecutive_losses" class="inline-label">
-                  Enable Maximum Consecutive Losses Control
-                </label>
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content"
-                    >Counts net losing trades. In Improved, the loss counter resets only after a
-                    successful restart. Legacy can remain stopped permanently.</span
-                  ></span
-                >
-              </div>
-              <div class="row">
-                <label for="max_consecutive_losses">Maximum Consecutive Losses:</label>
-                <input
-                  id="max_consecutive_losses"
-                  type="number"
-                  min="1"
-                  step="1"
-                  v-model.number="activeParams.max_consecutive_losses"
-                />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content"
-                    >Maximum number of consecutive losing trades allowed before trading stops.</span
-                  ></span
-                >
-              </div>
-
-              <div v-if="isImproved" class="row">
-                <label for="cooldown_bars">Cooldown after loss/drawdown (bars):</label>
-                <input
-                  id="cooldown_bars"
-                  type="number"
-                  min="1"
-                  step="1"
-                  v-model.number="activeParams.cooldown_bars"
-                />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">
-                    Shared pause after either the consecutive-loss limit or the drawdown limit is
-                    reached. The timer starts on the first completed bar that is flat. For example,
-                    48 bars is 48 hours on 1h and 12 hours on 15m. ADX recovery is also required
-                    when enabled.
-                  </span></span
-                >
-              </div>
-
-              <div class="row row-checkbox">
-                <input
-                  id="enable_dmi_filter"
-                  type="checkbox"
-                  v-model="activeParams.enable_dmi_filter"
-                />
-                <label for="enable_dmi_filter" class="inline-label"
-                  >Enable ADX trend-strength filter</label
-                >
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content"
-                    >Filters trend strength using ADX, not direction. Improved blocks entries during
-                    warm-up and requires confirmed recovery above the resume threshold.</span
-                  ></span
-                >
-              </div>
-              <div class="row">
-                <label for="dmi_length">DMI Length:</label>
-                <input
-                  id="dmi_length"
-                  type="number"
-                  min="1"
-                  step="1"
-                  v-model.number="activeParams.dmi_length"
-                />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">Length of the DMI indicator.</span></span
-                >
-              </div>
-              <div class="row">
-                <label for="dmi_smoothing">DMI Smoothing Length:</label>
-                <input
-                  id="dmi_smoothing"
-                  type="number"
-                  min="1"
-                  step="1"
-                  v-model.number="activeParams.dmi_smoothing"
-                />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">Smoothing length for the DMI indicator.</span></span
-                >
-              </div>
-              <div class="row">
-                <label for="dmi_threshold">ADX pause below:</label>
-                <input
-                  id="dmi_threshold"
                   type="number"
                   min="0"
                   step="0.1"
-                  v-model.number="activeParams.dmi_threshold"
-                />
-                <span class="tip" tabindex="0"
-                  >ⓘ<span class="tip-content">Threshold value for the DMI filter.</span></span
-                >
+                  aria-label="Maximum drawdown percent"
+                /><span>%</span>
               </div>
-              <template v-if="isImproved">
-                <div class="row">
-                  <label for="adx_resume">ADX resume at or above:</label>
+            </div>
+            <div class="safeguard-line">
+              <label class="backtest-check-row" for="enable_max_losses">
+                <input
+                  id="enable_max_losses"
+                  v-model="activeParams.enable_max_consecutive_losses"
+                  type="checkbox"
+                />
+                <span>Consecutive losses</span>
+              </label>
+              <input
+                v-model.number="activeParams.max_consecutive_losses"
+                class="compact-input"
+                type="number"
+                min="1"
+                aria-label="Maximum consecutive losses"
+              />
+            </div>
+            <div v-if="isImproved" class="research-field">
+              <label for="cooldown-bars">Cooldown</label>
+              <div class="field-with-unit">
+                <input
+                  id="cooldown-bars"
+                  v-model.number="activeParams.cooldown_bars"
+                  type="number"
+                  min="1"
+                /><span>bars</span>
+              </div>
+            </div>
+            <div class="research-divider" />
+            <label class="backtest-check-row" for="enable_dmi_filter">
+              <input
+                id="enable_dmi_filter"
+                v-model="activeParams.enable_dmi_filter"
+                type="checkbox"
+              />
+              <span>ADX trend-strength filter</span>
+            </label>
+            <div class="research-field">
+              <label for="dmi-length">DMI length</label>
+              <input
+                id="dmi-length"
+                v-model.number="activeParams.dmi_length"
+                type="number"
+                min="1"
+              />
+            </div>
+            <div class="research-field">
+              <label for="dmi-smoothing">ADX smoothing</label>
+              <input
+                id="dmi-smoothing"
+                v-model.number="activeParams.dmi_smoothing"
+                type="number"
+                min="1"
+              />
+            </div>
+            <div class="research-field">
+              <label for="dmi-threshold">ADX pause below</label>
+              <input
+                id="dmi-threshold"
+                v-model.number="activeParams.dmi_threshold"
+                type="number"
+                min="0"
+                step="0.05"
+              />
+            </div>
+            <template v-if="isImproved">
+              <div class="research-field">
+                <label for="adx-resume">ADX resume at</label>
+                <input
+                  id="adx-resume"
+                  v-model.number="activeParams.adx_resume_threshold"
+                  type="number"
+                  min="0"
+                  step="0.05"
+                />
+              </div>
+              <div class="research-field">
+                <label for="adx-confirmation">Confirmation</label>
+                <div class="field-with-unit">
                   <input
-                    id="adx_resume"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.05"
-                    v-model.number="activeParams.adx_resume_threshold"
-                  />
-                </div>
-                <div class="row">
-                  <label for="adx_confirmation">ADX confirmation (bars):</label>
-                  <input
-                    id="adx_confirmation"
+                    id="adx-confirmation"
+                    v-model.number="activeParams.adx_resume_bars"
                     type="number"
                     min="1"
-                    step="1"
-                    v-model.number="activeParams.adx_resume_bars"
-                  />
-                  <span class="tip" tabindex="0"
-                    >ⓘ<span class="tip-content">
-                      Consecutive completed bars at or above the resume threshold. Between pause and
-                      resume thresholds, ADX keeps its current running/paused state.
-                    </span></span
-                  >
+                  /><span>bars</span>
                 </div>
-              </template>
-            </fieldset>
-          </section>
-        </fieldset>
+              </div>
+            </template>
+          </div>
+        </section>
 
-        <!-- HØYRE: PROPERTIES -->
-        <fieldset class="col-card">
-          <legend>Properties</legend>
-
-          <section class="group">
-            <div class="group-title">Strategy Selection</div>
-            <div class="row">
-              <label for="strategy">Strategy:</label>
-              <select id="strategy" v-model="selectedStrategy">
-                <option value="smaCross">SMA Crossover</option>
-                <option value="emaVwap">EMA/VWAP</option>
-              </select>
+        <section class="research-card">
+          <h2 class="research-card-title">Execution Costs</h2>
+          <div class="research-card-body research-field-grid">
+            <div class="research-field">
+              <label for="commission">Commission</label>
+              <div class="field-with-unit">
+                <input
+                  id="commission"
+                  v-model.number="commissionPercent"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                /><span>%</span>
+              </div>
             </div>
-          </section>
-
-          <section class="group">
-            <div class="group-title">Experimental</div>
-
-            <!-- Round prices to exchange tick -->
-            <div class="row row-checkbox">
+            <div class="research-field">
+              <label for="slippage">Slippage</label>
+              <div class="field-with-unit">
+                <input id="slippage" v-model.number="slippageTicks" type="number" min="0" /><span
+                  >ticks</span
+                >
+              </div>
+            </div>
+            <label class="backtest-check-row" for="priceToTick">
               <input
                 id="priceToTick"
-                type="checkbox"
                 v-model="priceToTick"
-                class="accent-blue-500"
+                type="checkbox"
                 :disabled="activeParams.parity_mode"
               />
-              <label for="priceToTick" class="inline-label"> Round prices to exchange tick </label>
+              <span>Round to exchange tick</span>
+            </label>
+          </div>
+        </section>
+      </div>
 
-              <!-- info-ikon -->
-              <span class="tip" tabindex="0"
-                >ⓘ
-                <span class="tip-content">
-                  <b>What it does:</b> Rounds all simulated order prices to the exchange's tick
-                  size, always in your disfavor (buy up / sell down).<br />
-                  <b>Use it when:</b> you want exchange-realistic fills.<br />
-                  <b>Turn it OFF</b> to match TradingView Strategy Tester (TV typically doesn't
-                  force tick rounding).
-                </span>
-              </span>
-            </div>
-
-            <!-- Match TradingView (Parity) -->
-            <div class="row row-checkbox">
-              <input
-                id="parityMode"
-                type="checkbox"
-                v-model="activeParams.parity_mode"
-                class="accent-blue-500"
-              />
-              <label for="parityMode" class="inline-label">Match TradingView (Parity)</label>
-
-              <!-- info-ikon -->
-              <span class="tip" tabindex="0"
-                >ⓘ
-                <span class="tip-content">
-                  <b>Match TradingView (Parity)</b><br />
-                  • Når <i>Risk-Based</i> er AV: implicit sizing (prosent/qty/USDT) med gebyrer og
-                  trunct qty til exchange step.<br />
-                  • Når <i>Risk-Based</i> er PÅ: qty beregnes eksplisitt og rundes ned til exchange
-                  step (gebyrer fortsatt inkludert).<br />
-                  <b>Nivåer</b> (SL/TP) kvantiseres til tick; <b>fills</b> rundes ikke (stop har
-                  slippage, TP fylles på nivå). Dette endrer ikke close[1]-paritet i sizing.<br />
-                </span>
-              </span>
-            </div>
-
-            <!-- NEW: Enable/disable TV preset override (default OFF)
-            <div class="row row-checkbox">
-              <input id="enablePreset" type="checkbox" v-model="presetEnabled" class="accent-blue-500" />
-              <label for="enablePreset" class="inline-label">Enable TV preset JSON (override Data Limit)</label>
-              <span class="tip" tabindex="0">ⓘ
-                <span class="tip-content">
-                  Når dette er PÅ, bruker vi verdiene du limer inn under <b>Paste TV preset JSON</b>
-                  for å sette <i>Bars LIVE</i> nøyaktig som i TradingView. Når det er AV, ignoreres preset helt.
-                </span>
-              </span>
-            </div> -->
+      <div class="backtest-column backtest-results-column">
+        <div class="backtest-kpi-grid">
+          <section class="research-card backtest-kpi">
+            <span>Net P&amp;L</span>
+            <strong v-if="results" :class="formattedTotalPnl.class">{{
+              formattedTotalPnl.text
+            }}</strong>
+            <strong v-else>—</strong>
           </section>
+          <section class="research-card backtest-kpi">
+            <span>Max drawdown</span>
+            <strong v-if="results" class="metric-negative"
+              >{{ results.summary.max_drawdown_percent.toFixed(2) }}%</strong
+            >
+            <strong v-else>—</strong>
+          </section>
+          <section class="research-card backtest-kpi">
+            <span>Profit factor</span>
+            <strong>{{ results ? results.summary.profit_factor.toFixed(2) : '—' }}</strong>
+          </section>
+          <section class="research-card backtest-kpi">
+            <span>Trades</span>
+            <strong>{{ results ? results.summary.total_trades : '—' }}</strong>
+          </section>
+        </div>
 
-          <section class="group">
-            <div class="group-title">Data Source</div>
-            <div class="row">
-              <label for="symbol">Symbol:</label><input id="symbol" v-model="symbol" type="text" />
-            </div>
-            <div class="row">
-              <label for="timeframe">Timeframe:</label>
-              <select id="timeframe" v-model="timeframe">
-                <option v-for="iv in BINANCE_INTERVALS" :key="iv" :value="iv">{{ iv }}</option>
-              </select>
-            </div>
-            <div class="row">
-              <label for="limit">Data Limit:</label>
-              <input id="limit" v-model.number="dataLimitForFetch" type="number" />
-            </div>
-            <div class="advanced-data-settings">
+        <section class="research-card backtest-chart-card">
+          <h2 class="research-card-title">
+            Equity &amp; Drawdown
+            <small v-if="resultBehavior">{{ resultBehavior }}</small>
+          </h2>
+          <div v-if="results?.equity_curve?.length" class="backtest-chart-wrap">
+            <PnlChart
+              :equity-curve="results.equity_curve"
+              :initial-capital="initialCapital"
+              :trade-log="results.trade_log"
+              :range-start-ms="tvStartMs"
+              :range-end-ms="tvEndMs"
+              baseline-mode="firstNonFlat"
+            />
+          </div>
+          <div v-else class="backtest-empty-state">
+            <span class="empty-state-icon">⌁</span>
+            <strong>No backtest results yet</strong>
+            <span>Configure the strategy and run a backtest to populate the chart.</span>
+          </div>
+        </section>
+
+        <section class="research-card recent-trades-card">
+          <header class="research-card-title recent-trades-heading">
+            <h2>Recent Trades</h2>
+            <div class="recent-trades-heading-actions">
+              <small>{{
+                processedTradeLog.length ? processedTradeLog.length + ' total' : 'Waiting for a run'
+              }}</small>
               <button
+                v-if="processedTradeLog.length"
+                class="trade-log-open-button"
                 type="button"
-                class="advanced-data-toggle"
-                :aria-expanded="showHistoricalCutoff"
-                @click="showHistoricalCutoff = !showHistoricalCutoff"
+                @click="showFullTradeLog = true"
               >
-                <span aria-hidden="true">{{ showHistoricalCutoff ? '▾' : '▸' }}</span>
-                Historical cutoff (UTC)
+                ↗ View all trades
               </button>
-              <div v-if="showHistoricalCutoff" class="advanced-data-panel">
-                <input
-                  id="end-before"
-                  v-model="endBeforeUtc"
-                  type="datetime-local"
-                  aria-label="Historical cutoff in UTC"
-                />
-                <p>Leave empty to use the latest bars.</p>
-              </div>
             </div>
-            <!-- TV preset UI – vises kun når aktivert -->
-            <div class="row" v-if="presetEnabled">
-              <label for="tvpreset">Paste TV preset JSON:</label>
-              <div class="preset-col">
-                <textarea id="tvpreset" rows="2" @paste.prevent="onPastePreset($event)"></textarea>
-                <div class="preset-actions">
-                  <button @click="showPreset">Show preset</button>
-                  <button @click="clearPreset" style="background: #555">Clear preset</button>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="group">
-            <div class="group-title">Backtest Properties</div>
-            <div class="row">
-              <label for="initial-capital">Initial Capital:</label>
-              <input id="initial-capital" type="number" v-model.number="initialCapital" />
-              <span v-if="isRiskBased" class="hint"> Disabled when Risk-Based sizing active!</span>
-            </div>
-            <div class="row" :class="{ 'row-disabled': disableOrderSizeValue }">
-              <label for="order-size-value">Order Size:</label>
-              <input
-                id="order-size-value"
-                type="number"
-                v-model.number="activeParams.order_size_value"
-                :disabled="disableOrderSizeValue"
-              />
-              <select
-                v-model="activeParams.order_size_mode"
-                :disabled="isRiskBased"
-                style="margin-left: 8px"
-              >
-                <option :value="OrderSizeMode.PercentOfEquity">% of equity</option>
-                <option :value="OrderSizeMode.FixedQuantity">Quantity</option>
-                <option :value="OrderSizeMode.FixedValue">USDT</option>
-              </select>
-              <!-- lite info-ikon -->
-              <span class="tip" tabindex="0"
-                >ⓘ
-                <span class="tip-content">
-                  <b>% of equity</b> – implicit TV-sizing fra valgt prosent (default 100%).<br />
-                  <b>Quantity</b> – fast antall enheter.<br />
-                  <b>USDT</b> – fast verdi i quote.<br />
-                  <hr style="border-color: #333; margin: 6px 0" />
-                  <b>Risk-Based</b> overstyrer Order Size: qty beregnes eksplisitt fra
-                  <i>Risk per Trade %</i> og <i>ATR</i> (gearing anvendes).
-                </span>
-              </span>
-            </div>
-          </section>
-
-          <section class="group">
-            <div class="group-title">Backtest Costs</div>
-            <div class="row">
-              <label for="commission">Commission (%):</label
-              ><input
-                id="commission"
-                type="number"
-                step="0.01"
-                v-model.number="commissionPercent"
-                style="width: 60px"
-              />
-            </div>
-            <div class="row">
-              <label for="slippage">Slippage (ticks):</label
-              ><input
-                id="slippage"
-                type="number"
-                v-model.number="slippageTicks"
-                style="width: 60px"
-              />
-            </div>
-          </section>
-        </fieldset>
-      </div>
-
-      <button class="run-btn" @click="runBacktest" :disabled="isLoading">
-        {{ isLoading ? 'Running Backtest...' : 'Run Backtest' }}
-      </button>
-      <!--
-      <button @click="runDebug" style="background-color: #55aaff; margin-top: 10px;">
-          Run Stepped VWAP Debug
-      </button>
-      -->
-    </div>
-
-    <div class="results-panel" v-if="results">
-      <h3 class="section-title">Backtest Results</h3>
-      <p v-if="resultBehavior" class="mode-note">Behavior mode: {{ resultBehavior }}</p>
-
-      <!-- Metrics + Chart merged into a single visual card -->
-      <div class="results-stack">
-        <div class="summary-metrics">
-          <div>
-            <strong>Total P&L:</strong><br />
-            <span :class="formattedTotalPnl.class">{{ formattedTotalPnl.text }}</span>
-          </div>
-          <div>
-            <strong>Max equity drawdown:</strong><br />
-            {{ results.summary.max_drawdown_amount.toFixed(2) }} USDT ({{
-              results.summary.max_drawdown_percent.toFixed(2)
-            }}
-            %)
-          </div>
-          <div><strong>Total Trades:</strong><br />{{ results.summary.total_trades }}</div>
-          <div>
-            <strong>Profitable trades:</strong><br />{{
-              results.summary.total_trades
-                ? (
-                    (results.summary.profitable_trades / results.summary.total_trades) *
-                    100
-                  ).toFixed(2)
-                : '0.00'
-            }}% ({{ results.summary.profitable_trades }})
-          </div>
-          <div>
-            <strong>Profit factor:</strong><br />{{ results.summary.profit_factor.toFixed(3) }}
-          </div>
-        </div>
-
-        <div class="chart-card" v-if="results?.equity_curve?.length">
-          <PnlChart
-            :equity-curve="results.equity_curve"
-            :initial-capital="initialCapital"
-            :trade-log="results.trade_log"
-            :range-start-ms="tvStartMs"
-            :range-end-ms="tvEndMs"
-            baseline-mode="firstNonFlat"
-          />
-        </div>
-
-        <div v-else class="empty-chart-placeholder">No performance data to display.</div>
-      </div>
-
-      <h3 class="section-title">List of Trades</h3>
-
-      <table v-if="processedTradeLog.length > 0">
-        <thead>
-          <tr>
-            <th>Trade #</th>
-            <th>Type</th>
-            <th>Date/Time</th>
-            <th>Signal</th>
-            <th>Price</th>
-            <th style="text-align: center">Position size</th>
-            <th style="text-align: center">Net P&L</th>
-            <th style="text-align: center">Run-up</th>
-            <th style="text-align: center">Drawdown</th>
-            <th style="text-align: center">Cumulative P&L</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template v-for="trade in processedTradeLog" :key="trade.entry.trade_id">
-            <!-- Viser lukkede handler -->
-            <template v-if="trade.exit">
-              <!-- Rad for Exit -->
-              <tr>
-                <td :rowspan="2">
-                  <span class="trade-id">{{ trade.entry.trade_id }}</span>
-                  <span
-                    class="dir-text"
-                    :class="trade.entry.direction === 'long' ? 'dir-long' : 'dir-short'"
-                  >
+          </header>
+          <div v-if="processedTradeLog.length" class="compact-trades-wrap">
+            <table class="compact-trades-table">
+              <thead>
+                <tr>
+                  <th>Trade</th>
+                  <th>Direction</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>Signal</th>
+                  <th>Size</th>
+                  <th>Net P&amp;L</th>
+                  <th>Return</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="trade in processedTradeLog.slice(0, 10)" :key="trade.entry.trade_id">
+                  <td>#{{ trade.entry.trade_id }}</td>
+                  <td :class="trade.entry.direction === 'long' ? 'dir-long' : 'dir-short'">
                     {{ trade.entry.direction === 'long' ? 'Long' : 'Short' }}
-                  </span>
-                </td>
-                <td>Exit</td>
-                <td>{{ formatDateTime(trade.exit.timestamp) }}</td>
-                <td>{{ signalLabel(trade.exit) }}</td>
-                <td>{{ trade.exit.price.toFixed(2) }} {{ quoteCurrency }}</td>
-                <td :rowspan="2" style="text-align: center">
-                  <div>{{ trade.exit.quantity.toFixed(2) }}</div>
-                  <div class="percent-value">
-                    {{ formatPositionValue(trade.positionValue) }}&nbsp;{{ quoteCurrency }}
-                  </div>
-                </td>
-
-                <!-- Net P&L med % -->
-                <td
-                  :rowspan="2"
-                  :class="{ profit: trade.exit.pnl! > 0, loss: trade.exit.pnl! < 0 }"
-                >
-                  <div>{{ trade.exit.pnl?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div
-                    class="percent-value"
-                    :class="{
-                      profit: (trade.pnlPercent ?? 0) > 0,
-                      loss: (trade.pnlPercent ?? 0) < 0,
-                    }"
-                  >
+                  </td>
+                  <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
+                  <td>{{ trade.exit ? formatDateTime(trade.exit.timestamp) : 'Open' }}</td>
+                  <td>{{ signalLabel(trade.exit ?? trade.entry) }}</td>
+                  <td>
+                    {{ (trade.exit?.quantity ?? trade.entry.quantity).toFixed(2) }} /
+                    {{ formatPositionValue(trade.positionValue) }}
+                  </td>
+                  <td :class="(trade.exit?.pnl ?? trade.entry.pnl ?? 0) >= 0 ? 'profit' : 'loss'">
+                    {{ (trade.exit?.pnl ?? trade.entry.pnl ?? 0).toFixed(2) }} {{ quoteCurrency }}
+                  </td>
+                  <td :class="(trade.pnlPercent ?? 0) >= 0 ? 'profit' : 'loss'">
                     {{ tvFmt2(trade.pnlPercent) }}%
-                  </div>
-                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->
-                </td>
-
-                <!-- Run-up med % -->
-                <td :rowspan="2">
-                  <div>{{ trade.exit.run_up_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
-                  <!-- <div class="percent-value percent-small">{{ trade.runUpPercent4?.toFixed(4) }}%</div> -->
-                </td>
-
-                <!-- Drawdown med % -->
-                <td :rowspan="2">
-                  <div>-{{ trade.exit.drawdown_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
-                  <!-- <div class="percent-value percent-small">-{{ trade.drawdownPercent4?.toFixed(4) }}%</div> -->
-                </td>
-
-                <!-- Cumulative P&L -->
-                <td
-                  :rowspan="2"
-                  :class="{ profit: trade.cumulativePnl! > 0, loss: trade.cumulativePnl! < 0 }"
-                >
-                  <div>{{ trade.cumulativePnl?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div
-                    class="percent-value"
-                    :class="{
-                      profit: (trade.cumulativePnlPercent ?? 0) > 0,
-                      loss: (trade.cumulativePnlPercent ?? 0) < 0,
-                    }"
-                  >
-                    {{ trade.cumulativePnlPercent?.toFixed(2) }}%
-                  </div>
-                </td>
-              </tr>
-              <!-- Rad for Entry -->
-              <tr>
-                <td>Entry</td>
-                <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
-                <td>{{ signalLabel(trade.entry) }}</td>
-                <td>{{ trade.entry.price.toFixed(2) }} {{ quoteCurrency }}</td>
-              </tr>
-            </template>
-            <!-- ÅPEN TRADE: vis som to rader (Exit/Open + Entry) -->
-            <template v-else>
-              <!-- ØVERST: Exit ... Open (TV-stil) -->
-              <tr>
-                <td :rowspan="2">
-                  <span class="trade-id">{{ trade.entry.trade_id }}</span>
-                  <span
-                    class="dir-text"
-                    :class="trade.entry.direction === 'long' ? 'dir-long' : 'dir-short'"
-                  >
-                    {{ trade.entry.direction === 'long' ? 'Long' : 'Short' }}
-                  </span>
-                </td>
-                <td>Exit {{ trade.entry.direction }}</td>
-                <td>{{ formatDateTime(openNowTs ?? trade.entry.timestamp) }}</td>
-                <td>Open</td>
-                <td>
-                  <!-- bruk simulert "nå"-pris fra bar_log-markør, ellers "—" -->
-                  <template v-if="openNowPrice !== undefined"
-                    >{{ openNowPrice!.toFixed(2) }} {{ quoteCurrency }}</template
-                  >
-                  <template v-else>—</template>
-                </td>
-
-                <!-- Quantity/pos-verdi over to rader -->
-                <td :rowspan="2" style="text-align: center">
-                  <div>{{ trade.entry.quantity.toFixed(2) }}</div>
-                  <div class="percent-value">
-                    {{ formatPositionValue(trade.positionValue) }}&nbsp;{{ quoteCurrency }}
-                  </div>
-                </td>
-
-                <!-- P&L (åpen) over to rader, som i TV -->
-                <td
-                  :rowspan="2"
-                  :class="{ profit: (trade.entry.pnl ?? 0) > 0, loss: (trade.entry.pnl ?? 0) < 0 }"
-                >
-                  <div>{{ trade.entry.pnl?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div
-                    class="percent-value"
-                    :class="{
-                      profit: (trade.pnlPercent ?? 0) > 0,
-                      loss: (trade.pnlPercent ?? 0) < 0,
-                    }"
-                  >
-                    {{ trade.pnlPercent?.toFixed(2) }}%
-                  </div>
-                  <!-- <div class="percent-value percent-small">{{ trade.pnlPercent4?.toFixed(4) }}%</div> -->
-                </td>
-
-                <!-- Run-up (over to rader) -->
-                <td :rowspan="2">
-                  <div>{{ trade.entry.run_up_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value">{{ tvFmt2(trade.runUpPercent) }}%</div>
-                </td>
-
-                <!-- Drawdown (over to rader) -->
-                <td :rowspan="2">
-                  <div>-{{ trade.entry.drawdown_amount?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div class="percent-value">-{{ tvFmt2(trade.drawdownPercent) }}%</div>
-                </td>
-
-                <!-- Cumulative P&L (over to rader) -->
-                <td
-                  :rowspan="2"
-                  :class="{ profit: trade.cumulativePnl! > 0, loss: trade.cumulativePnl! < 0 }"
-                >
-                  <div>{{ trade.cumulativePnl?.toFixed(2) }} {{ quoteCurrency }}</div>
-                  <div
-                    class="percent-value"
-                    :class="{
-                      profit: (trade.cumulativePnlPercent ?? 0) > 0,
-                      loss: (trade.cumulativePnlPercent ?? 0) < 0,
-                    }"
-                  >
-                    {{ trade.cumulativePnlPercent?.toFixed(2) }}%
-                  </div>
-                </td>
-              </tr>
-
-              <!-- UNDER: Entry-raden for samme trade -->
-              <tr>
-                <td>Entry {{ trade.entry.direction }}</td>
-                <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
-                <td>{{ signalLabel(trade.entry) }}</td>
-                <td>{{ trade.entry.price.toFixed(2) }} {{ quoteCurrency }}</td>
-              </tr>
-            </template>
-          </template>
-        </tbody>
-      </table>
-
-      <p v-else-if="results">No trades were executed.</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="recent-trades-empty">Completed and open trades will appear here.</div>
+          <div class="research-card-body backtest-results-actions">
+            <button
+              class="research-secondary"
+              type="button"
+              :disabled="!results"
+              @click="exportBacktestReport"
+            >
+              ⇩ Export report
+            </button>
+            <RouterLink class="open-optimize-link" to="/optimize">↗ Open in Optimize</RouterLink>
+          </div>
+        </section>
+      </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="showFullTradeLog"
+        class="trade-log-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="full-trade-log-title"
+        @click.self="showFullTradeLog = false"
+      >
+        <section class="trade-log-dialog">
+          <header class="trade-log-dialog-header">
+            <div>
+              <h2 id="full-trade-log-title">List of Trades</h2>
+              <p>{{ selectedStrategyLabel }} · {{ symbol }} · {{ timeframe }} · {{ processedTradeLog.length }} trades</p>
+            </div>
+            <div class="trade-log-dialog-actions">
+              <button class="research-secondary" type="button" @click="exportBacktestReport">
+                ⇩ Export report
+              </button>
+              <button
+                class="trade-log-close-button"
+                type="button"
+                aria-label="Close full trade log"
+                @click="showFullTradeLog = false"
+              >
+                ×
+              </button>
+            </div>
+          </header>
+
+          <div class="trade-log-table-wrap">
+            <table class="trade-log-table">
+              <thead>
+                <tr>
+                  <th>Trade #</th>
+                  <th>Type</th>
+                  <th>Date and time</th>
+                  <th>Signal</th>
+                  <th>Price</th>
+                  <th>Size</th>
+                  <th>Net P&amp;L</th>
+                  <th>Return</th>
+                  <th>Commission</th>
+                  <th>Favorable excursion</th>
+                  <th>Adverse excursion</th>
+                  <th>Cumulative P&amp;L</th>
+                  <th>Duration (bars)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="trade in processedTradeLog" :key="trade.entry.trade_id">
+                  <tr v-if="trade.exit" class="trade-exit-row">
+                    <td rowspan="2" class="trade-number-cell">
+                      <strong>#{{ trade.entry.trade_id }}</strong>
+                      <span :class="trade.entry.direction === 'long' ? 'dir-long' : 'dir-short'">
+                        {{ trade.entry.direction === 'long' ? 'Long' : 'Short' }}
+                      </span>
+                    </td>
+                    <td>Exit</td>
+                    <td>{{ formatDateTime(trade.exit.timestamp) }}</td>
+                    <td>{{ signalLabel(trade.exit) }}</td>
+                    <td>{{ trade.exit.price.toFixed(2) }} <small>{{ quoteCurrency }}</small></td>
+                    <td rowspan="2" class="two-line-value">
+                      <strong>{{ trade.exit.quantity.toFixed(2) }}</strong>
+                      <small>{{ formatPositionValue(trade.positionValue) }} {{ quoteCurrency }}</small>
+                    </td>
+                    <td
+                      rowspan="2"
+                      class="two-line-value"
+                      :class="(trade.exit.pnl ?? 0) >= 0 ? 'profit' : 'loss'"
+                    >
+                      <strong>{{ (trade.exit.pnl ?? 0).toFixed(2) }} {{ quoteCurrency }}</strong>
+                      <small>{{ tvFmt2(trade.pnlPercent) }}%</small>
+                    </td>
+                    <td
+                      rowspan="2"
+                      :class="(trade.pnlPercent ?? 0) >= 0 ? 'profit' : 'loss'"
+                    >
+                      {{ tvFmt2(trade.pnlPercent) }}%
+                    </td>
+                    <td rowspan="2">{{ trade.commission?.toFixed(2) }} {{ quoteCurrency }}</td>
+                    <td rowspan="2" class="two-line-value">
+                      <strong>{{ Math.abs(trade.exit.run_up_amount ?? 0).toFixed(2) }} {{ quoteCurrency }}</strong>
+                      <small>{{ tvFmt2(trade.runUpPercent) }}%</small>
+                    </td>
+                    <td rowspan="2" class="two-line-value">
+                      <strong>-{{ Math.abs(trade.exit.drawdown_amount ?? 0).toFixed(2) }} {{ quoteCurrency }}</strong>
+                      <small>-{{ tvFmt2(Math.abs(trade.drawdownPercent ?? 0)) }}%</small>
+                    </td>
+                    <td
+                      rowspan="2"
+                      class="two-line-value"
+                      :class="(trade.cumulativePnl ?? 0) >= 0 ? 'profit' : 'loss'"
+                    >
+                      <strong>{{ trade.cumulativePnl?.toFixed(2) }} {{ quoteCurrency }}</strong>
+                      <small>{{ trade.cumulativePnlPercent?.toFixed(2) }}%</small>
+                    </td>
+                    <td rowspan="2" class="duration-cell">{{ trade.durationBars }}</td>
+                  </tr>
+                  <tr v-if="trade.exit" class="trade-entry-row">
+                    <td>Entry</td>
+                    <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
+                    <td>{{ signalLabel(trade.entry) }}</td>
+                    <td>{{ trade.entry.price.toFixed(2) }} <small>{{ quoteCurrency }}</small></td>
+                  </tr>
+                  <tr v-else class="trade-entry-row trade-open-row">
+                    <td class="trade-number-cell">
+                      <strong>#{{ trade.entry.trade_id }}</strong>
+                      <span :class="trade.entry.direction === 'long' ? 'dir-long' : 'dir-short'">
+                        {{ trade.entry.direction === 'long' ? 'Long' : 'Short' }}
+                      </span>
+                    </td>
+                    <td>Entry</td>
+                    <td>{{ formatDateTime(trade.entry.timestamp) }}</td>
+                    <td>{{ signalLabel(trade.entry) }}</td>
+                    <td>{{ trade.entry.price.toFixed(2) }} <small>{{ quoteCurrency }}</small></td>
+                    <td class="two-line-value">
+                      <strong>{{ trade.entry.quantity.toFixed(2) }}</strong>
+                      <small>{{ formatPositionValue(trade.positionValue) }} {{ quoteCurrency }}</small>
+                    </td>
+                    <td colspan="7" class="open-trade-cell">Open position</td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1173,6 +1008,10 @@ const BINANCE_INTERVALS = [
 ] as const
 const timeframe = ref<(typeof BINANCE_INTERVALS)[number]>('1h')
 const selectedStrategy = ref<'smaCross' | 'emaVwap'>('smaCross')
+const showFullTradeLog = ref(false)
+const selectedStrategyLabel = computed(() =>
+  selectedStrategy.value === 'emaVwap' ? 'EMA / VWAP' : 'SMA Crossover',
+)
 
 // Canonical parameters for the SMA Crossover strategy.
 const smaParams = reactive<SmaParams>({
@@ -1351,6 +1190,36 @@ const runBacktest = async () => {
   }
 }
 
+const exportBacktestReport = () => {
+  if (!results.value) return
+
+  const report = {
+    exportedAt: new Date().toISOString(),
+    strategy: selectedStrategy.value,
+    market: {
+      symbol: symbol.value,
+      timeframe: timeframe.value,
+      dataLimit: dataLimitForFetch.value,
+      endBeforeUtc: endBeforeUtc.value || null,
+    },
+    execution: {
+      initialCapital: initialCapital.value,
+      commissionPercent: commissionPercent.value,
+      slippageTicks: slippageTicks.value,
+      priceToTick: priceToTick.value,
+    },
+    parameters: selectedStrategy.value === 'smaCross' ? { ...smaParams } : { ...emaVwapParams },
+    results: results.value,
+  }
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${symbol.value}-${selectedStrategy.value}-backtest.json`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 /* ------------------------------------------------------------------
    4.  KEY METRIC ØVERST (uendret)
 --------------------------------------------------------------------*/
@@ -1457,6 +1326,12 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
 
     // Verdien som vises i "Position size" (kun visning)
     const entryValDisp = priceEntryDisp * qtyForPct
+    const commissionRate = commissionPercent.value / 100
+    const commissionDisp = cent(
+      t.entry.price * qtyForPct * commissionRate +
+        (closed ? t.exit!.price * qtyForPct * commissionRate : 0),
+    )
+    const durationBars = closed ? Math.max(0, t.exit!.bar_index - t.entry.bar_index) : undefined
     // ---------- 4. Kumulativ PnL (full presisjon), rund KUN ved visning ----
     if (closed) closedCumPrecise += pnlRaw // <- use raw P&L
     const cumPrecise = closed ? closedCumPrecise : closedCumPrecise + pnlRaw // include open trade's raw P&L in its own row
@@ -1476,6 +1351,8 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
       drawdownPercent4: drawDnPct4,
       cumulativePnl: cumPnlDisp,
       cumulativePnlPercent: cumPct,
+      commission: commissionDisp,
+      durationBars,
 
       // tallene du faktisk viser i cellene
       entry: { ...t.entry, price: priceEntryDisp, quantity: qtyDisp },
@@ -1949,5 +1826,613 @@ tr > td:nth-child(4)  /* Date/Time */ {
   /* rød som TV */
   color: #ef4444; /* ~Tailwind red-500 */
   opacity: 0.86; /* Litt svakere for bedre lesbarhet */
+}
+
+/* ------------------------------------------------------------------ */
+/* Backtest research layout                                            */
+/* ------------------------------------------------------------------ */
+.dashboard-view.research-view {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  --label-width: auto;
+}
+
+.backtest-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+.backtest-page-header h1 {
+  margin: 0;
+  color: #d7e5f8;
+  font-size: clamp(1.65rem, 2.6vw, 2.35rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  text-align: left;
+}
+
+.backtest-page-header p {
+  max-width: 52rem;
+  margin: 0.25rem 0 0;
+  color: #9eacbc;
+}
+
+.backtest-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.parity-badge {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #4a6178;
+  border-radius: 6px;
+  background: rgba(74, 97, 120, 0.12);
+  color: #b9c8d8;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.parity-badge.active {
+  border-color: #2da767;
+  background: rgba(45, 167, 103, 0.1);
+  color: #63e69e;
+}
+
+.parity-badge input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.dashboard-view .backtest-run-button {
+  min-width: 158px;
+  background: linear-gradient(180deg, #2294ff, #087af0);
+  color: white;
+  box-shadow: 0 9px 24px rgba(8, 122, 240, 0.18);
+}
+
+.backtest-layout {
+  display: grid;
+  grid-template-columns: minmax(270px, 0.74fr) minmax(300px, 0.78fr) minmax(620px, 1.95fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.backtest-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.backtest-results-column {
+  align-self: stretch;
+}
+
+.recent-trades-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.recent-trades-heading h2 {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+}
+
+.recent-trades-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.trade-log-open-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #70b9ff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.trade-log-open-button:hover {
+  color: #a8d6ff;
+}
+
+.dashboard-view .research-card {
+  border-color: #344353;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.015), transparent 40%), #18222d;
+}
+
+.dashboard-view .research-card-title {
+  margin: 0;
+  color: #70b9ff;
+  font-size: 1rem;
+  text-align: left;
+}
+
+.dashboard-view .research-card-body {
+  padding: 1rem;
+}
+
+.dashboard-view .research-field {
+  grid-template-columns: minmax(112px, 0.86fr) minmax(118px, 1fr);
+}
+
+.dashboard-view.research-view input[type='text'],
+.dashboard-view.research-view input[type='number'],
+.dashboard-view.research-view input[type='datetime-local'],
+.dashboard-view.research-view select,
+.dashboard-view.research-view textarea {
+  border-color: #445466;
+  background: #202c38;
+  color: #edf3fa;
+}
+
+.dashboard-view input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.dashboard-view input[type='number']::-webkit-inner-spin-button,
+.dashboard-view input[type='number']::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.preset-card-row {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.preset-card-row textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #445466;
+  border-radius: 6px;
+  background: #202c38;
+  color: #edf3fa;
+}
+
+.backtest-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #c7d3e1;
+  cursor: pointer;
+  font-size: 0.83rem;
+}
+
+.backtest-check-row input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: #1687ff;
+}
+
+.field-with-unit,
+.compact-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #445466;
+  border-radius: 6px;
+  background: #202c38;
+}
+
+.field-with-unit input,
+.compact-value input {
+  border: 0;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.field-with-unit span,
+.compact-value span {
+  padding-right: 0.65rem;
+  color: #91a1b2;
+  font-size: 0.75rem;
+}
+
+.compound-control {
+  display: grid;
+  grid-template-columns: minmax(58px, 0.62fr) minmax(96px, 1fr);
+  gap: 0.45rem;
+}
+
+.safeguard-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.compact-input {
+  max-width: 82px;
+}
+
+.backtest-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.backtest-kpi {
+  min-height: 92px;
+  padding: 0.85rem 0.9rem;
+}
+
+.backtest-kpi span {
+  display: block;
+  color: #a9b8c8;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.backtest-kpi strong {
+  display: block;
+  margin-top: 0.25rem;
+  color: #edf4fc;
+  font-size: clamp(1.05rem, 1.35vw, 1.55rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.backtest-chart-wrap {
+  height: 400px;
+  overflow: hidden;
+}
+
+.backtest-empty-state {
+  display: flex;
+  min-height: 400px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 0.45rem;
+  color: #8fa0b1;
+  text-align: center;
+}
+
+.backtest-empty-state strong {
+  color: #dce7f3;
+}
+
+.empty-state-icon {
+  color: #419ff5;
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.compact-trades-wrap,
+.full-trade-table-wrap {
+  overflow: auto;
+}
+
+.dashboard-view .compact-trades-table,
+.dashboard-view .full-trade-table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-view .compact-trades-table th,
+.dashboard-view .compact-trades-table td,
+.dashboard-view .full-trade-table th,
+.dashboard-view .full-trade-table td {
+  padding: 0.62rem 0.68rem;
+  border: 0;
+  border-bottom: 1px solid #2a3947;
+  background: transparent;
+  color: #d7e1ed;
+  font-size: 0.76rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.dashboard-view .compact-trades-table th,
+.dashboard-view .full-trade-table th {
+  background: #202c38;
+  color: #aebdce;
+  font-size: 0.71rem;
+  font-weight: 700;
+}
+
+.recent-trades-empty {
+  display: grid;
+  min-height: 170px;
+  place-items: center;
+  color: #8495a7;
+  font-size: 0.84rem;
+}
+
+.backtest-results-actions {
+  display: flex;
+  margin-top: auto;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.dashboard-view .research-secondary,
+.open-optimize-link {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 1rem;
+  border: 1px solid #4b6074;
+  border-radius: 6px;
+  background: #1a2631;
+  color: #d7e3f1;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.open-optimize-link {
+  border-color: #228bf4;
+  color: #70b9ff;
+}
+
+.trade-log-overlay {
+  position: fixed;
+  z-index: 90;
+  top: 68px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  background: #101922;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.trade-log-overlay::-webkit-scrollbar {
+  display: none;
+}
+
+:global(body:has(.trade-log-overlay)) {
+  overflow: hidden;
+}
+
+.trade-log-dialog {
+  display: flex;
+  width: min(100%, 1660px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 1.6rem clamp(1rem, 2vw, 2rem) 3rem;
+  box-sizing: border-box;
+  flex-direction: column;
+  background: transparent;
+  color: #dce7f3;
+}
+
+.trade-log-dialog-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.15rem;
+}
+
+.trade-log-dialog-header h2 {
+  margin: 0;
+  color: #d7e5f8;
+  font-size: clamp(1.65rem, 2.6vw, 2.35rem);
+  font-weight: 750;
+  letter-spacing: -0.035em;
+}
+
+.trade-log-dialog-header p {
+  margin: 0.25rem 0 0;
+  color: #91a2b4;
+  font-size: 0.8rem;
+}
+
+.trade-log-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.trade-log-dialog .research-secondary {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #4b6074;
+  border-radius: 6px;
+  background: #1a2631;
+  color: #d7e3f1;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.trade-log-close-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #4b6074;
+  border-radius: 6px;
+  background: #1a2631;
+  color: #d7e3f1;
+  cursor: pointer;
+  font-size: 1.65rem;
+  line-height: 1;
+  place-items: center;
+}
+
+.trade-log-close-button:hover,
+.trade-log-dialog .research-secondary:hover {
+  border-color: #228bf4;
+  color: #70b9ff;
+}
+
+.trade-log-table-wrap {
+  flex: 0 0 auto;
+  overflow: visible;
+  border: 1px solid #344353;
+  border-radius: 8px;
+  background: #151f29;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.13);
+}
+
+.trade-log-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.trade-log-table th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: 0.78rem 0.72rem;
+  border-bottom: 1px solid #405164;
+  background: #202c38;
+  color: #b6c5d5;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-align: left;
+  white-space: normal;
+}
+
+.trade-log-table td {
+  padding: 0.68rem 0.72rem;
+  border: 0;
+  border-bottom: 1px solid #293846;
+  background: #151f29;
+  color: #dce5ef;
+  font-size: 0.76rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: normal;
+}
+
+.trade-log-table tr:hover td {
+  background: #192631;
+}
+
+.trade-log-table .trade-entry-row td {
+  border-bottom-color: #3a4a5a;
+}
+
+.trade-number-cell {
+  min-width: 88px;
+}
+
+.trade-number-cell strong,
+.trade-number-cell span,
+.two-line-value strong,
+.two-line-value small {
+  display: block;
+}
+
+.trade-number-cell strong {
+  margin-bottom: 0.2rem;
+  color: #edf4fc;
+}
+
+.trade-log-table small,
+.two-line-value small {
+  color: #93a5b7;
+  font-size: 0.68rem;
+}
+
+.trade-log-table .profit,
+.trade-log-table .profit small {
+  color: #4fc879;
+}
+
+.trade-log-table .loss,
+.trade-log-table .loss small {
+  color: #ff6666;
+}
+
+.duration-cell {
+  text-align: right !important;
+}
+
+.open-trade-cell {
+  color: #f4c765 !important;
+  text-align: center !important;
+}
+
+@media (max-width: 720px) {
+  .trade-log-overlay {
+    top: 120px;
+  }
+
+  .trade-log-dialog-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .trade-log-dialog-actions {
+    width: 100%;
+  }
+
+  .trade-log-dialog .research-secondary {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1380px) {
+  .backtest-layout {
+    grid-template-columns: minmax(270px, 0.8fr) minmax(300px, 0.85fr);
+  }
+
+  .backtest-results-column {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 820px) {
+  .backtest-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .backtest-header-actions {
+    width: 100%;
+  }
+
+  .backtest-header-actions > * {
+    flex: 1;
+  }
+
+  .backtest-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .backtest-results-column {
+    grid-column: auto;
+  }
+
+  .backtest-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

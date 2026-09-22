@@ -196,6 +196,8 @@ export interface ProcessedTrade {
 
   cumulativePnl?: number;
   cumulativePnlPercent?: number;
+  commission?: number;
+  durationBars?: number;
 }
 
 // --- Typer for Optimalisering (Frontend -> optimizationWorker) ---
