@@ -23,6 +23,9 @@ export type BacktestAnalysisSnapshot = {
     marginLongPercent?: number
     marginShortPercent?: number
     marginEnforcementEnabled?: boolean
+    priceToTick?: boolean
+    tickSize?: number
+    stepSize?: number
   }
   results: BacktestResult
 }
@@ -66,6 +69,11 @@ export const saveBacktestAnalysis = (snapshot: BacktestAnalysisSnapshot) => {
       // The complete snapshot remains available in memory for this app session.
     }
   }
+}
+
+export const clearBacktestAnalysis = () => {
+  inMemorySnapshot = null
+  sessionStorage.removeItem(STORAGE_KEY)
 }
 
 export const loadBacktestAnalysis = (): BacktestAnalysisSnapshot | null => {

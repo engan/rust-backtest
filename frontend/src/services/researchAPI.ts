@@ -14,8 +14,17 @@ export type ResearchJobSnapshot = {
 
 const jsonRequest = async <T>(url: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(url, init)
-  const body = (await response.json()) as T & { error?: string }
-  if (!response.ok) throw new Error(body.error || `${response.status} ${response.statusText}`)
+  const text = await response.text()
+  let body: (T & { error?: string }) | null = null
+  if (text) {
+    try {
+      body = JSON.parse(text) as T & { error?: string }
+    } catch {
+      // A stopped proxy or an upstream error can return HTML instead of JSON.
+    }
+  }
+  if (!response.ok) throw new Error(body?.error || `Research service returned HTTP ${response.status} ${response.statusText}`.trim())
+  if (!body) throw new Error('Research service returned an empty or invalid response.')
   return body
 }
 

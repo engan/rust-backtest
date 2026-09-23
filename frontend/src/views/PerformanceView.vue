@@ -3,6 +3,8 @@ import { computed, onActivated, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import PnlChart from '@/components/PnlChart.vue'
 import { loadBacktestAnalysis } from '@/services/backtestReport'
+import { buildPeriodEndChanges } from '@/services/performancePeriods'
+import { exitSignalName, tradeCommission } from '@/services/tradeMetrics'
 import type { EquityPoint, TradeEvent } from '@/types/common_strategy_types'
 
 type PerformanceTab = 'Breakdown' | 'Periodical' | 'Benchmarking' | 'Margin usage' | 'Growth & decline'
@@ -39,12 +41,6 @@ const result = computed(() => snapshot.value?.results ?? null)
 const initialCapital = computed(() => snapshot.value?.execution.initialCapital ?? 0)
 const currency = computed(() => snapshot.value?.execution.quoteCurrency ?? 'USDT')
 
-const signalName = (signal: string) =>
-  String(signal || 'Unknown')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replaceAll('_', ' ')
-    .replace(/^./, (character) => character.toUpperCase())
-
 const closedTrades = computed<ClosedTrade[]>(() => {
   const events = result.value?.trade_log ?? []
   const grouped = new Map<number, { entry?: TradeEvent; exit?: TradeEvent }>()
@@ -54,13 +50,13 @@ const closedTrades = computed<ClosedTrade[]>(() => {
     if (event.event_type === 'Exit') trade.exit = event
     grouped.set(event.trade_id, trade)
   }
-  const rate = (snapshot.value?.execution.commissionPercent ?? 0) / 100
+  const commissionPercent = snapshot.value?.execution.commissionPercent ?? 0
   return [...grouped.values()]
     .filter((trade): trade is { entry: TradeEvent; exit: TradeEvent } => Boolean(trade.entry && trade.exit))
     .map(({ entry, exit }) => ({
       id: entry.trade_id,
       direction: entry.direction,
-      signal: signalName(exit.signal),
+      signal: exitSignalName(exit.signal),
       entryTimestamp: entry.timestamp,
       exitTimestamp: exit.timestamp,
       pnl: exit.pnl ?? 0,
@@ -68,8 +64,8 @@ const closedTrades = computed<ClosedTrade[]>(() => {
       runUp: exit.run_up_amount ?? 0,
       drawdown: exit.drawdown_amount ?? 0,
       durationBars: Math.max(0, exit.bar_index - entry.bar_index),
-      positionValue: entry.price * entry.quantity,
-      commission: (entry.price * entry.quantity + exit.price * exit.quantity) * rate,
+      positionValue: entry.price * Math.abs(entry.quantity),
+      commission: tradeCommission(entry, exit, result.value?.margin_calls ?? [], commissionPercent),
     }))
     .sort((left, right) => left.exitTimestamp - right.exitTimestamp)
 })
@@ -97,7 +93,8 @@ const durationDays = (milliseconds: number) => Math.max(0, milliseconds / 86_400
 
 const barLog = computed(() =>
   (result.value?.bar_log ?? []).filter(
-    (bar: { timestamp?: number; close?: number }) => Number.isFinite(bar.timestamp) && Number.isFinite(bar.close),
+    (bar: { timestamp?: number; close?: number; sig?: string }) =>
+      Number.isFinite(bar.timestamp) && Number.isFinite(bar.close) && bar.sig !== 'OpenNow',
   ) as Array<{ timestamp: number; close: number }>,
 )
 const buyHoldReturn = computed(() => {
@@ -147,33 +144,14 @@ const periodLabel = (key: string, unit: PeriodUnit) => {
 }
 
 const periodRows = computed(() => {
-  const tradeGroups = new Map<string, number>()
-  for (const trade of closedTrades.value) {
-    const key = periodKey(trade.exitTimestamp, periodUnit.value)
-    tradeGroups.set(key, (tradeGroups.get(key) ?? 0) + trade.pnl)
-  }
-  const benchmarkGroups = new Map<string, { first: number; last: number }>()
-  for (const bar of barLog.value) {
-    const key = periodKey(bar.timestamp, periodUnit.value)
-    const group = benchmarkGroups.get(key)
-    if (group) group.last = bar.close
-    else benchmarkGroups.set(key, { first: bar.close, last: bar.close })
-  }
-  return [...new Set([...tradeGroups.keys(), ...benchmarkGroups.keys()])]
-    .sort()
-    .map((key) => {
-      const benchmark = benchmarkGroups.get(key)
-      const benchmarkPnl = benchmark?.first
-        ? initialCapital.value * (benchmark.last / benchmark.first - 1)
-        : 0
-      return { key, label: periodLabel(key, periodUnit.value), strategy: tradeGroups.get(key) ?? 0, benchmark: benchmarkPnl }
-    })
-    .slice(-18)
+  return buildPeriodEndChanges(
+    result.value?.equity_curve ?? [], barLog.value, initialCapital.value,
+    (timestamp) => periodKey(timestamp, periodUnit.value),
+  ).map((row) => ({ ...row, label: periodLabel(row.key, periodUnit.value) }))
 })
 
-const periodicReturns = computed(() =>
-  periodRows.value.map((row) => (initialCapital.value ? row.strategy / initialCapital.value : 0)),
-)
+const visiblePeriodRows = computed(() => periodRows.value.slice(-18))
+const periodicReturns = computed(() => periodRows.value.map((row) => row.strategyReturn))
 const average = (values: number[]) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
 const standardDeviation = (values: number[]) => {
   if (values.length < 2) return 0
@@ -182,19 +160,21 @@ const standardDeviation = (values: number[]) => {
 }
 const sharpeRatio = computed(() => {
   const deviation = standardDeviation(periodicReturns.value)
-  return deviation ? average(periodicReturns.value) / deviation : 0
+  if (periodicReturns.value.length < 3 || !deviation) return null
+  return average(periodicReturns.value) / deviation * Math.sqrt(periodsPerYear.value)
 })
 const sortinoRatio = computed(() => {
-  const downside = periodicReturns.value.filter((value) => value < 0)
-  const deviation = Math.sqrt(average(downside.map((value) => value ** 2)))
-  return deviation ? average(periodicReturns.value) / deviation : 0
+  const deviation = Math.sqrt(average(periodicReturns.value.map((value) => Math.min(0, value) ** 2)))
+  if (periodicReturns.value.length < 3 || !deviation) return null
+  return average(periodicReturns.value) / deviation * Math.sqrt(periodsPerYear.value)
 })
+const periodsPerYear = computed(() => ({ Daily: 365.25, Weekly: 52.18, Monthly: 12, Yearly: 1 })[periodUnit.value])
 
 const correlation = computed(() => {
   const rows = periodRows.value
-  if (rows.length < 2 || !initialCapital.value) return 0
-  const strategy = rows.map((row) => row.strategy / initialCapital.value)
-  const benchmark = rows.map((row) => row.benchmark / initialCapital.value)
+  if (rows.length < 3 || !initialCapital.value) return null
+  const strategy = rows.map((row) => row.strategyReturn)
+  const benchmark = rows.map((row) => row.benchmarkReturn)
   const strategyMean = average(strategy)
   const benchmarkMean = average(benchmark)
   const numerator = strategy.reduce(
@@ -203,7 +183,7 @@ const correlation = computed(() => {
   )
   const left = Math.sqrt(strategy.reduce((sum, value) => sum + (value - strategyMean) ** 2, 0))
   const right = Math.sqrt(benchmark.reduce((sum, value) => sum + (value - benchmarkMean) ** 2, 0))
-  return left && right ? numerator / (left * right) : 0
+  return left && right ? numerator / (left * right) : null
 })
 
 const signalRows = computed(() => {
@@ -237,15 +217,24 @@ const outliers = computed(() => {
 const returnBins = computed(() => {
   const values = closedTrades.value.map((trade) => trade.returnPercent)
   if (!values.length) return []
-  const minimum = Math.floor(Math.min(...values))
-  const maximum = Math.ceil(Math.max(...values))
-  const width = Math.max(0.5, (maximum - minimum || 1) / 8)
-  return Array.from({ length: 8 }, (_, index) => {
-    const from = minimum + index * width
-    const to = index === 7 ? maximum + 1e-9 : from + width
-    const members = values.filter((value) => value >= from && value < to)
-    return { label: `${fmt(from, 1)}–${fmt(to, 1)}%`, count: members.length, positive: (from + to) / 2 >= 0 }
-  })
+  const hasNegative = values.some((value) => value < 0)
+  const hasPositive = values.some((value) => value >= 0)
+  const negativeBins = hasNegative ? (hasPositive ? 4 : 8) : 0
+  const positiveBins = hasPositive ? (hasNegative ? 4 : 8) : 0
+  const makeBins = (from: number, to: number, count: number, positive: boolean) =>
+    Array.from({ length: count }, (_, index) => {
+      const lower = from + (to - from) * index / count
+      const upper = from + (to - from) * (index + 1) / count
+      return {
+        label: `${fmt(lower, 1)}–${fmt(upper, 1)}%`,
+        count: values.filter((value) => value >= lower && (index === count - 1 ? value <= upper : value < upper)).length,
+        positive,
+      }
+    })
+  return [
+    ...makeBins(Math.floor(Math.min(...values)), 0, negativeBins, false),
+    ...makeBins(0, Math.max(1, Math.ceil(Math.max(...values))), positiveBins, true),
+  ]
 })
 const maxBinCount = computed(() => Math.max(1, ...returnBins.value.map((bin) => bin.count)))
 const tradeDonut = computed(() => {
@@ -285,21 +274,23 @@ const streakStats = computed(() => {
 
 const weekdayRows = computed(() => {
   const formatter = new Intl.DateTimeFormat('en', { weekday: 'short', timeZone: 'UTC' })
-  const rows = new Map<string, number>()
+  const rows = new Map<string, { value: number; count: number }>()
   for (const trade of closedTrades.value) {
     const key = formatter.format(new Date(trade.exitTimestamp))
-    rows.set(key, (rows.get(key) ?? 0) + trade.pnl)
+    const current = rows.get(key) ?? { value: 0, count: 0 }
+    rows.set(key, { value: current.value + trade.pnl, count: current.count + 1 })
   }
   const order = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  return order.map((label) => ({ label, value: rows.get(label) ?? 0 }))
+  return order.map((label) => ({ label, value: rows.get(label)?.value ?? 0, count: rows.get(label)?.count ?? 0 }))
 })
 const hourRows = computed(() => {
-  const rows = new Map<number, number>()
+  const rows = new Map<number, { value: number; count: number }>()
   for (const trade of closedTrades.value) {
     const hour = new Date(trade.exitTimestamp).getUTCHours()
-    rows.set(hour, (rows.get(hour) ?? 0) + trade.pnl)
+    const current = rows.get(hour) ?? { value: 0, count: 0 }
+    rows.set(hour, { value: current.value + trade.pnl, count: current.count + 1 })
   }
-  return [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([hour, value]) => ({ label: `${String(hour).padStart(2, '0')}:00`, value }))
+  return [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([hour, row]) => ({ label: `${String(hour).padStart(2, '0')}:00`, ...row }))
 })
 const maxTimeMagnitude = computed(() => Math.max(1, ...weekdayRows.value.map((row) => Math.abs(row.value))))
 
@@ -348,7 +339,9 @@ const marginUsageRows = computed(() =>
         ? bar.side === 'L' ? 'long' : bar.side === 'S' ? 'short' : undefined
         : fallback?.direction
       const quantity = hasNativePosition ? Math.abs(bar.quantity_pos ?? 0) : (fallback?.quantity ?? 0)
-      const rate = direction === 'long'
+      const rate = !snapshot.value?.execution.marginEnforcementEnabled
+        ? 1
+        : direction === 'long'
         ? marginLongRate.value
         : direction === 'short' ? marginShortRate.value : 0
       return {
@@ -358,7 +351,7 @@ const marginUsageRows = computed(() =>
     }),
 )
 
-const averageMarginUsed = computed(() => average(marginUsageRows.value.map((row) => row.margin)))
+const averageMarginUsed = computed(() => average(marginUsageRows.value.filter((row) => row.margin > 0).map((row) => row.margin)))
 const maximumMarginUsed = computed(() => Math.max(0, ...marginUsageRows.value.map((row) => row.margin)))
 const marginEfficiency = computed(() =>
   averageMarginUsed.value ? (result.value?.summary.pnl_total ?? 0) / averageMarginUsed.value : 0,
@@ -396,15 +389,17 @@ const drawdownEpisodes = computed(() => {
   const episodes: Array<{ duration: number; depth: number }> = []
   let peak = curve[0]?.equity ?? initialCapital.value
   let start: EquityPoint | null = null
+  let peakPoint: EquityPoint | null = curve[0] ?? null
   let depth = 0
   for (const point of curve) {
     if (point.equity >= peak) {
       if (start) episodes.push({ duration: point.timestamp - start.timestamp, depth })
       peak = point.equity
+      peakPoint = point
       start = null
       depth = 0
     } else {
-      start ??= point
+      start ??= peakPoint ?? point
       depth = Math.max(depth, peak ? ((peak - point.equity) / peak) * 100 : 0)
     }
   }
@@ -436,20 +431,13 @@ const equityStreaks = computed(() => {
 })
 
 const monthlyGrowth = computed(() => {
-  const groups = new Map<string, { first: number; last: number }>()
-  for (const point of result.value?.equity_curve ?? []) {
-    const key = periodKey(point.timestamp, 'Monthly')
-    const group = groups.get(key)
-    if (group) group.last = point.equity
-    else groups.set(key, { first: point.equity, last: point.equity })
-  }
-  return [...groups.entries()].slice(-12).map(([key, values]) => ({
-    label: periodLabel(key, 'Monthly'),
-    value: values.first ? ((values.last - values.first) / values.first) * 100 : 0,
-  }))
+  return buildPeriodEndChanges(
+    result.value?.equity_curve ?? [], [], initialCapital.value,
+    (timestamp) => periodKey(timestamp, 'Monthly'),
+  ).map((row) => ({ label: periodLabel(row.key, 'Monthly'), value: row.strategyReturn * 100 })).slice(-12)
 })
 
-const maxPeriodMagnitude = computed(() => Math.max(1, ...periodRows.value.flatMap((row) => [Math.abs(row.strategy), Math.abs(row.benchmark)])))
+const maxPeriodMagnitude = computed(() => Math.max(1, ...visiblePeriodRows.value.flatMap((row) => [Math.abs(row.strategy), Math.abs(row.benchmark)])))
 const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((row) => Math.abs(row.value))))
 </script>
 
@@ -534,23 +522,24 @@ const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((
           <div class="metric-strip">
             <div><span>Annualized return (CAGR)</span><strong>{{ percent(annualizedReturn) }}</strong></div>
             <div><span>Total return</span><strong>{{ percent(strategyReturn) }}</strong></div>
-            <div><span>Sharpe ratio</span><strong>{{ fmt(sharpeRatio, 3) }}</strong></div>
-            <div><span>Sortino ratio</span><strong>{{ fmt(sortinoRatio, 3) }}</strong></div>
+            <div><span>Sharpe ratio · annualized</span><strong>{{ sharpeRatio == null ? '—' : fmt(sharpeRatio, 3) }}</strong></div>
+            <div><span>Sortino ratio · annualized</span><strong>{{ sortinoRatio == null ? '—' : fmt(sortinoRatio, 3) }}</strong></div>
           </div>
           <div class="chart-heading-row">
-            <h3>Realized P&amp;L by period</h3>
+            <h3>Equity change by period</h3>
             <div class="period-selector">
               <button v-for="unit in periodUnits" :key="unit" type="button" :class="{ active: periodUnit === unit }" @click="periodUnit = unit">{{ unit }}</button>
             </div>
           </div>
           <div class="period-chart">
-            <div v-for="row in periodRows" :key="row.key" class="period-column">
+            <div v-for="row in visiblePeriodRows" :key="row.key" class="period-column">
               <div class="period-bars">
                 <i :class="row.strategy >= 0 ? 'bar-positive' : 'bar-negative'" :style="{ height: `${Math.max(3, (Math.abs(row.strategy) / maxPeriodMagnitude) * 88)}px`, bottom: row.strategy >= 0 ? '50%' : 'auto', top: row.strategy < 0 ? '50%' : 'auto' }" />
               </div>
               <span>{{ row.label }}</span>
             </div>
           </div>
+          <p class="analysis-note">Returns use period-end equity, including open positions. Sharpe and Sortino use a zero target return and annualize by the selected period length; at least three periods are required.</p>
         </div>
 
         <div v-else-if="activePerformanceTab === 'Benchmarking'" class="analysis-panel">
@@ -558,7 +547,7 @@ const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((
             <div><span>Strategy return</span><strong>{{ percent(strategyReturn) }}</strong></div>
             <div><span>Buy and hold return</span><strong :class="buyHoldReturn >= 0 ? 'positive' : 'negative'">{{ percent(buyHoldReturn) }}</strong></div>
             <div><span>Strategy outperformance</span><strong>{{ percent(strategyReturn - buyHoldReturn) }}</strong></div>
-            <div><span>Period correlation</span><strong>{{ fmt(correlation, 3) }}</strong></div>
+            <div><span>Period correlation</span><strong>{{ correlation == null ? '—' : fmt(correlation, 3) }}</strong></div>
           </div>
           <div class="chart-heading-row">
             <h3>Strategy versus benchmark</h3>
@@ -567,25 +556,26 @@ const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((
             </div>
           </div>
           <div class="comparison-chart">
-            <div v-for="row in periodRows" :key="row.key" class="comparison-column">
+            <div v-for="row in visiblePeriodRows" :key="row.key" class="comparison-column">
               <div class="comparison-bars">
-                <i class="strategy-bar" :style="{ height: `${Math.max(2, (Math.abs(row.strategy) / maxPeriodMagnitude) * 76)}px`, opacity: row.strategy < 0 ? 0.45 : 1 }" />
-                <i class="benchmark-bar" :style="{ height: `${Math.max(2, (Math.abs(row.benchmark) / maxPeriodMagnitude) * 76)}px`, opacity: row.benchmark < 0 ? 0.45 : 1 }" />
+                <i class="strategy-bar" :style="{ height: `${Math.max(2, (Math.abs(row.strategy) / maxPeriodMagnitude) * 76)}px`, bottom: row.strategy >= 0 ? '50%' : 'auto', top: row.strategy < 0 ? '50%' : 'auto' }" :title="`Strategy: ${fmt(row.strategy)} ${currency}`" />
+                <i class="benchmark-bar" :style="{ height: `${Math.max(2, (Math.abs(row.benchmark) / maxPeriodMagnitude) * 76)}px`, bottom: row.benchmark >= 0 ? '50%' : 'auto', top: row.benchmark < 0 ? '50%' : 'auto' }" :title="`Buy and hold: ${fmt(row.benchmark)} ${currency}`" />
               </div>
               <span>{{ row.label }}</span>
             </div>
           </div>
-          <div class="chart-legend"><span class="strategy-dot" />Strategy P&amp;L <span class="benchmark-dot" />Buy and hold</div>
+          <div class="chart-legend"><span class="strategy-dot" />Strategy equity change <span class="benchmark-dot" />Buy and hold equity change</div>
+          <p class="analysis-note">Both series compare consecutive period ends. Correlation requires at least three periods.</p>
         </div>
 
         <div v-else-if="activePerformanceTab === 'Margin usage'" class="analysis-panel">
           <div class="metric-strip">
-            <div><span>Margin efficiency</span><strong :class="marginEfficiency >= 0 ? 'positive' : 'negative'">{{ marginEfficiencyLabel }}</strong></div>
-            <div><span>Average margin used</span><strong>{{ fmt(averageMarginUsed) }} {{ currency }}</strong></div>
-            <div><span>Maximum margin used</span><strong>{{ fmt(maximumMarginUsed) }} {{ currency }}</strong></div>
+            <div><span>{{ snapshot.execution.marginEnforcementEnabled ? 'Margin efficiency' : 'Exposure efficiency' }}</span><strong :class="marginEfficiency >= 0 ? 'positive' : 'negative'">{{ marginEfficiencyLabel }}</strong></div>
+            <div><span>{{ snapshot.execution.marginEnforcementEnabled ? 'Average margin while open' : 'Average notional while open' }}</span><strong>{{ fmt(averageMarginUsed) }} {{ currency }}</strong></div>
+            <div><span>{{ snapshot.execution.marginEnforcementEnabled ? 'Maximum margin used' : 'Maximum position notional' }}</span><strong>{{ fmt(maximumMarginUsed) }} {{ currency }}</strong></div>
             <div><span>Margin calls</span><strong :class="marginCalls.length ? 'negative' : ''">{{ marginCallLabel }}</strong></div>
           </div>
-          <h3>Margin usage at bar close</h3>
+          <h3>{{ snapshot.execution.marginEnforcementEnabled ? 'Margin usage' : 'Position exposure' }} at bar close</h3>
           <div class="exposure-chart">
             <div v-for="row in marginChartRows" :key="row.timestamp" class="exposure-column" :title="`${new Date(row.timestamp).toISOString().slice(0, 10)}: ${fmt(row.margin)} ${currency}`">
               <i :style="{ height: `${Math.max(3, maximumMarginUsed ? (row.margin / maximumMarginUsed) * 100 : 0)}%` }" />
@@ -601,7 +591,7 @@ const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((
               <strong class="negative">{{ call.full_liquidation ? 'Full' : 'Partial' }}</strong>
             </div>
           </div>
-          <p class="analysis-note">Used margin is position notional at each bar close multiplied by the configured long or short requirement. Margin efficiency is total P&amp;L divided by average used margin. When enabled, forced liquidation follows the four-times-cover rule and is evaluated at bar close.</p>
+          <p class="analysis-note">{{ snapshot.execution.marginEnforcementEnabled ? 'Used margin is position notional at each bar close multiplied by the configured long or short requirement. Margin efficiency is total P&L divided by average margin on bars with an open position. Forced liquidation follows the four-times-cover rule at bar close.' : 'Margin enforcement is off. The chart shows position notional at bar close, and exposure efficiency is total P&L divided by average notional on bars with an open position; no margin calls are modeled in this mode.' }}</p>
         </div>
 
         <div v-else class="analysis-panel">
@@ -674,9 +664,9 @@ const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((
 
         <div v-else class="analysis-panel">
           <div class="metric-strip">
-            <div><span>Best weekday</span><strong>{{ [...weekdayRows].sort((a, b) => b.value - a.value)[0]?.label ?? '—' }}</strong></div>
-            <div><span>Worst weekday</span><strong>{{ [...weekdayRows].sort((a, b) => a.value - b.value)[0]?.label ?? '—' }}</strong></div>
-            <div><span>Most active exit hour</span><strong>{{ [...hourRows].sort((a, b) => Math.abs(b.value) - Math.abs(a.value))[0]?.label ?? '—' }} UTC</strong></div>
+            <div><span>Best weekday</span><strong>{{ [...weekdayRows].filter((row) => row.count).sort((a, b) => b.value - a.value)[0]?.label ?? '—' }}</strong></div>
+            <div><span>Worst weekday</span><strong>{{ [...weekdayRows].filter((row) => row.count).sort((a, b) => a.value - b.value)[0]?.label ?? '—' }}</strong></div>
+            <div><span>Most active exit hour</span><strong>{{ [...hourRows].sort((a, b) => b.count - a.count)[0]?.label ?? '—' }} UTC</strong></div>
             <div><span>Average duration</span><strong>{{ fmt(average(closedTrades.map((trade) => trade.durationBars)), 1) }} bars</strong></div>
           </div>
           <h3>Realized P&amp;L by exit weekday</h3>
@@ -741,10 +731,11 @@ const maxMonthlyGrowth = computed(() => Math.max(1, ...monthlyGrowth.value.map((
 .period-bars i,.growth-bars i { position:absolute; right:15%; left:15%; z-index:1; }
 .bar-positive { background:#24b99d; }
 .bar-negative { background:#ff5968; }
-.comparison-bars { display:flex; width:75%; height:165px; align-items:flex-end; justify-content:center; gap:3px; }
-.comparison-bars i { display:block; width:32%; }
-.strategy-bar { background:#2f8fff; }
-.benchmark-bar { background:#9aa7af; }
+.comparison-bars { position:relative; width:75%; height:165px; }
+.comparison-bars::after { position:absolute; top:50%; right:0; left:0; height:1px; background:#5a6c77; content:''; }
+.comparison-bars i { position:absolute; z-index:1; width:32%; }
+.strategy-bar { left:16%; background:#2f8fff; }
+.benchmark-bar { right:16%; background:#9aa7af; }
 .chart-legend { display:flex; justify-content:center; gap:0.5rem; margin-top:0.8rem; color:#a9c0cf; font-size:0.72rem; }
 .chart-legend span,.donut-legend i { width:8px; height:8px; border-radius:50%; }
 .strategy-dot { background:#2f8fff; }.benchmark-dot { margin-left:0.7rem; background:#9aa7af; }

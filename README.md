@@ -42,6 +42,7 @@ To run research jobs locally, place the private `rust-backtest-proprietary` chec
 
 ```bash
 pnpm run dev
+# If Corepack selects another package manager from a parent directory, use: npm run dev
 ```
 
 That script starts Vite and the native research server together. Vite forwards `/research-api` to the server on `127.0.0.1:8787`. The server stores job reports in the private checkout; no database is required for this local single-user workflow.

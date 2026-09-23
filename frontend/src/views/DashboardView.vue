@@ -23,6 +23,8 @@
       </div>
     </header>
 
+    <div v-if="backtestError" class="research-inline-notice" role="alert">{{ backtestError }}</div>
+
     <div class="backtest-layout">
       <div class="backtest-column">
         <section class="research-card">
@@ -633,7 +635,7 @@
           <div v-if="results?.equity_curve?.length" class="backtest-chart-wrap">
             <PnlChart
               :equity-curve="results.equity_curve"
-              :initial-capital="initialCapital"
+              :initial-capital="completedRun?.execution.initialCapital ?? initialCapital"
               :trade-log="results.trade_log"
               :range-start-ms="tvStartMs"
               :range-end-ms="tvEndMs"
@@ -658,7 +660,7 @@
                 v-if="processedTradeLog.length"
                 class="trade-log-open-button"
                 type="button"
-                @click="showFullTradeLog = true"
+                @click="openFullTradeLog"
               >
                 ↗ View all trades
               </button>
@@ -679,7 +681,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="trade in processedTradeLog.slice(0, 10)" :key="trade.entry.trade_id">
+                <tr v-for="trade in processedTradeLog.slice(0, 17)" :key="trade.entry.trade_id">
                   <td>#{{ trade.entry.trade_id }}</td>
                   <td :class="trade.entry.direction === 'long' ? 'dir-long' : 'dir-short'">
                     {{ trade.entry.direction === 'long' ? 'Long' : 'Short' }}
@@ -711,7 +713,7 @@
             >
               ⇩ Export report
             </button>
-            <RouterLink class="open-optimize-link" to="/optimize">↗ Open in Optimize</RouterLink>
+            <RouterLink class="open-optimize-link" to="/optimize" @click="openInOptimize">↗ Open in Optimize</RouterLink>
           </div>
         </section>
       </div>
@@ -724,23 +726,26 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="full-trade-log-title"
-        @click.self="showFullTradeLog = false"
+        @click.self="closeFullTradeLog"
+        @keydown.esc="closeFullTradeLog"
+        @keydown.tab="trapTradeLogFocus"
       >
         <section class="trade-log-dialog">
           <header class="trade-log-dialog-header">
             <div>
               <h2 id="full-trade-log-title">List of Trades</h2>
-              <p>{{ selectedStrategyLabel }} · {{ symbol }} · {{ timeframe }} · {{ processedTradeLog.length }} trades</p>
+              <p>{{ completedRun?.strategyLabel }} · {{ completedRun?.market.symbol }} · {{ completedRun?.market.timeframe }} · {{ processedTradeLog.length }} trades</p>
             </div>
             <div class="trade-log-dialog-actions">
               <button class="research-secondary" type="button" @click="exportBacktestReport">
                 ⇩ Export report
               </button>
               <button
+                ref="fullTradeLogCloseButton"
                 class="trade-log-close-button"
                 type="button"
                 aria-label="Close full trade log"
-                @click="showFullTradeLog = false"
+                @click="closeFullTradeLog"
               >
                 ×
               </button>
@@ -850,14 +855,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, nextTick } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useBacktest } from '@/composables/useBacktest'
 import { fetchSymbolFilters } from '@/services/binanceAPI'
 import PnlChart from '@/components/PnlChart.vue'
 import FieldTooltip from '@/components/FieldTooltip.vue'
 import { loadPreset, savePreset, parsePreset, type TvPreset } from '@/services/tvPreset.ts'
-import { saveBacktestAnalysis } from '@/services/backtestReport'
+import { clearBacktestAnalysis, saveBacktestAnalysis, type BacktestAnalysisSnapshot } from '@/services/backtestReport'
+import { saveResearchHandoff } from '@/services/researchHandoff'
+import { tradeCommission } from '@/services/tradeMetrics'
 
 // Importer ENUMs (verdier)
 import {
@@ -942,16 +949,10 @@ const formatPositionValue = (value: number) => {
   return value.toFixed(2)
 }
 
-// Prosent slik TV kalkulerer:
-//  • 4dp:  amount / tvBasisRaw * 100  → r4
-//  • 2dp: (r2(amount) / tvBasisDisp) * 100  → r2
+// Prosent slik TV kalkulerer: amount / tvBasisRaw * 100 → r4.
 const tvPercent4dp = (amount: number, entryPrice: number, entryQty: number) => {
   const base = tvBasisRaw(entryPrice, entryQty)
   return base ? r4((amount / base) * 100) : 0
-}
-const tvPercent2dp = (amount: number, entryPrice: number, entryQty: number) => {
-  const base = tvBasisDisp(entryPrice, entryQty)
-  return base ? r2((r2(amount) / base) * 100) : 0
 }
 
 // Normaliser SignalType fra Rust til en enkel nøkkel
@@ -977,7 +978,7 @@ function signalLabel(ev: TradeEvent): string {
   if (key === 'margincall') return 'Margin Call'
   // Rust uses Reversal internally for an opposite-cross close. Pine reports
   // that same exit using the strategy.close comment "Buy/Sell Close Opposite".
-  if (ev.event_type === 'Exit' && key === 'reversal') return `${side} Close Opposite`
+  if (ev.event_type === 'Exit' && (key === 'reversal' || key === 'closeopposite')) return `${side} Close Opposite`
 
   const TITLE: Record<string, string> = {
     // Entry
@@ -1117,6 +1118,32 @@ const BINANCE_INTERVALS = [
 const timeframe = ref<(typeof BINANCE_INTERVALS)[number]>('1h')
 const selectedStrategy = ref<'smaCross' | 'emaVwap'>('smaCross')
 const showFullTradeLog = ref(false)
+const fullTradeLogCloseButton = ref<HTMLButtonElement | null>(null)
+let fullTradeLogOpener: HTMLElement | null = null
+const openFullTradeLog = async () => {
+  fullTradeLogOpener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  showFullTradeLog.value = true
+  await nextTick()
+  fullTradeLogCloseButton.value?.focus()
+}
+const closeFullTradeLog = () => {
+  showFullTradeLog.value = false
+  fullTradeLogOpener?.focus()
+}
+const trapTradeLogFocus = (event: KeyboardEvent) => {
+  const dialog = fullTradeLogCloseButton.value?.closest('.trade-log-dialog')
+  const controls = dialog?.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+  if (!controls?.length) return
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
 const selectedStrategyLabel = computed(() =>
   selectedStrategy.value === 'emaVwap' ? 'EMA / VWAP' : 'SMA Crossover',
 )
@@ -1184,6 +1211,8 @@ const marginEnforcementEnabled = ref(false)
 // --- Resultat variabler ---
 const initialCapital = ref(10000)
 const results = ref<BacktestResult | null>(null)
+const completedRun = ref<BacktestAnalysisSnapshot | null>(null)
+const backtestError = ref('')
 const quoteCurrency = ref('USDT')
 
 // Slutt = siste bar i equity-curve (når resultater finnes)
@@ -1196,17 +1225,11 @@ const tvStartMs = computed(() =>
   results.value?.equity_curve?.length ? results.value.equity_curve[0]!.timestamp : undefined,
 )
 
-// SIMULERT "nå"-markør (pushes fra Rust når posisjon er åpen):
-// Vi leser siste bar_log-rad (sig == "OpenNow") for tid og pris.
-const openNowTs = computed<number | undefined>(() => results.value?.bar_log?.at(-1)?.timestamp)
-const openNowPrice = computed<number | undefined>(() => results.value?.bar_log?.at(-1)?.close)
-
 console.log('params.sma:', JSON.stringify(smaParams))
 
 // Manuelt Data Limit (ingen auto-beregning)
 const dataLimitForFetch = ref<number>(10000)
 const endBeforeUtc = ref('')
-const showHistoricalCutoff = ref(false)
 
 function showPreset() {
   if (!tvPreset.value) {
@@ -1222,26 +1245,51 @@ function clearPreset() {
 }
 
 /* ------------------------------------------------------------------
-   3.  KJØR BACKTEST (uendret)
+   3.  KJØR BACKTEST
 --------------------------------------------------------------------*/
+const captureCurrentBacktestSettings = (): Omit<BacktestAnalysisSnapshot, 'results'> => ({
+  version: 1,
+  capturedAt: new Date().toISOString(),
+  strategy: selectedStrategy.value,
+  strategyLabel: selectedStrategyLabel.value,
+  parameters: { ...activeParams.value },
+  market: {
+    symbol: symbol.value,
+    timeframe: timeframe.value,
+    dataLimit: dataLimitForFetch.value,
+    endBeforeUtc: endBeforeUtc.value || null,
+  },
+  execution: {
+    initialCapital: initialCapital.value,
+    commissionPercent: commissionPercent.value,
+    slippageTicks: slippageTicks.value,
+    quoteCurrency: symbol.value.endsWith('USDT') ? 'USDT'
+      : symbol.value.endsWith('USD') ? 'USD'
+        : symbol.value.endsWith('EUR') ? 'EUR'
+          : symbol.value.endsWith('BTC') ? 'BTC' : 'UNKNOWN',
+    marginLongPercent: marginLongPercent.value,
+    marginShortPercent: marginShortPercent.value,
+    marginEnforcementEnabled: marginEnforcementEnabled.value,
+    priceToTick: priceToTick.value,
+  },
+})
+
 const runBacktest = async () => {
-  results.value = null // Nullstill gamle resultater
+  const runSettings = captureCurrentBacktestSettings()
+  results.value = null
+  completedRun.value = null
+  clearBacktestAnalysis()
+  backtestError.value = ''
   isLoading.value = true
 
-  // Bestem quoteCurrency basert på symbol
-  if (symbol.value.endsWith('USDT')) quoteCurrency.value = 'USDT'
-  else if (symbol.value.endsWith('USD')) quoteCurrency.value = 'USD'
-  else if (symbol.value.endsWith('EUR')) quoteCurrency.value = 'EUR'
-  else if (symbol.value.endsWith('BTC')) quoteCurrency.value = 'BTC'
-  else quoteCurrency.value = 'UNKNOWN' // Fallback hvis ingen match
-
   try {
-    const endTimeExclusive = endBeforeUtc.value ? Date.parse(`${endBeforeUtc.value}Z`) : undefined
+    const endTimeExclusive = runSettings.market.endBeforeUtc
+      ? Date.parse(`${runSettings.market.endBeforeUtc}Z`) : undefined
     if (endTimeExclusive !== undefined && !Number.isFinite(endTimeExclusive)) {
       throw new Error('Invalid backtest end time.')
     }
     // Dynamisk tick size hentes fra API
-    const filters = await fetchSymbolFilters(symbol.value)
+    const filters = await fetchSymbolFilters(runSettings.market.symbol)
     // hent antall desimaler fra tick/step (robust for 0.1, 0.01, 0.0001, osv.)
     const decimalsFromStep = (x: number | string) => {
       const s = String(x)
@@ -1255,125 +1303,88 @@ const runBacktest = async () => {
     priceDecimals.value = decimalsFromStep(filters.tickSize)
     qtyDecimals.value = decimalsFromStep(filters.stepSize)
     const backtestConfig: BacktestConfig = {
-      commission_percent: commissionPercent.value,
-      slippage_ticks: slippageTicks.value,
+      commission_percent: runSettings.execution.commissionPercent,
+      slippage_ticks: runSettings.execution.slippageTicks,
       tick_size: filters.tickSize, // 0.01 hos Binance for de fleste USDT-par
       step_size: filters.stepSize, // 0.001 hos Binance - Husk å legge til step_size i BacktestConfig-typen din også
-      enforce_margin: marginEnforcementEnabled.value,
-      margin_long_percent: marginLongPercent.value,
-      margin_short_percent: marginShortPercent.value,
+      enforce_margin: runSettings.execution.marginEnforcementEnabled,
+      margin_long_percent: runSettings.execution.marginLongPercent,
+      margin_short_percent: runSettings.execution.marginShortPercent,
     }
+    let outcome: BacktestResult
     // Kall riktig Rust-funksjon basert på valgt strategi
-    if (selectedStrategy.value === 'smaCross') {
-      const runParams = { ...smaParams }
-      results.value = await runSmaCrossoverBacktest({
-        symbol: symbol.value,
-        interval: timeframe.value,
-        limit: dataLimitForFetch.value,
+    if (runSettings.strategy === 'smaCross') {
+      outcome = await runSmaCrossoverBacktest({
+        symbol: runSettings.market.symbol,
+        interval: runSettings.market.timeframe,
+        limit: runSettings.market.dataLimit,
         endTimeExclusive,
-        initialCapital: initialCapital.value,
+        initialCapital: runSettings.execution.initialCapital,
         config: backtestConfig,
-        params: runParams,
-        priceToTick: priceToTick.value,
+        params: runSettings.parameters as unknown as SmaParams,
+        priceToTick: runSettings.execution.priceToTick ?? false,
       })
-    } else if (selectedStrategy.value === 'emaVwap') {
-      const runParams = { ...emaVwapParams }
-      results.value = await runEmaVwapBacktest({
-        symbol: symbol.value,
-        interval: timeframe.value,
-        limit: dataLimitForFetch.value,
+    } else {
+      outcome = await runEmaVwapBacktest({
+        symbol: runSettings.market.symbol,
+        interval: runSettings.market.timeframe,
+        limit: runSettings.market.dataLimit,
         endTimeExclusive,
-        initialCapital: initialCapital.value,
+        initialCapital: runSettings.execution.initialCapital,
         config: backtestConfig,
-        params: runParams,
-        priceToTick: priceToTick.value,
+        params: runSettings.parameters as unknown as EmaVwapParams,
+        priceToTick: runSettings.execution.priceToTick ?? false,
       })
+    }
+    quoteCurrency.value = runSettings.execution.quoteCurrency
+    results.value = outcome
+    completedRun.value = {
+      ...runSettings,
+      execution: { ...runSettings.execution, tickSize: filters.tickSize, stepSize: filters.stepSize },
+      results: outcome,
     }
     cacheBacktestAnalysis()
   } catch (error) {
     console.error('Failed to run backtest:', error)
-    alert('An error occurred. Check the console for details.')
+    backtestError.value = error instanceof Error ? error.message : 'The backtest failed.'
   } finally {
     isLoading.value = false
   }
 }
 
 const cacheBacktestAnalysis = () => {
-  if (!results.value) return
-  saveBacktestAnalysis({
-    version: 1,
-    capturedAt: new Date().toISOString(),
-    strategy: selectedStrategy.value,
-    strategyLabel: selectedStrategyLabel.value,
-    parameters:
-      selectedStrategy.value === 'smaCross' ? { ...smaParams } : { ...emaVwapParams },
-    market: {
-      symbol: symbol.value,
-      timeframe: timeframe.value,
-      dataLimit: dataLimitForFetch.value,
-      endBeforeUtc: endBeforeUtc.value || null,
-    },
-    execution: {
-      initialCapital: initialCapital.value,
-      commissionPercent: commissionPercent.value,
-      slippageTicks: slippageTicks.value,
-      quoteCurrency: quoteCurrency.value,
-      marginLongPercent: marginLongPercent.value,
-      marginShortPercent: marginShortPercent.value,
-      marginEnforcementEnabled: marginEnforcementEnabled.value,
-    },
-    results: results.value,
-  })
+  if (completedRun.value) saveBacktestAnalysis(completedRun.value)
+}
+
+const openInOptimize = () => {
+  saveResearchHandoff(captureCurrentBacktestSettings())
 }
 
 const exportBacktestReport = () => {
-  if (!results.value) return
+  if (!completedRun.value) return
 
   const report = {
     exportedAt: new Date().toISOString(),
-    strategy: selectedStrategy.value,
-    market: {
-      symbol: symbol.value,
-      timeframe: timeframe.value,
-      dataLimit: dataLimitForFetch.value,
-      endBeforeUtc: endBeforeUtc.value || null,
-    },
-    execution: {
-      initialCapital: initialCapital.value,
-      commissionPercent: commissionPercent.value,
-      slippageTicks: slippageTicks.value,
-      priceToTick: priceToTick.value,
-      marginLongPercent: marginLongPercent.value,
-      marginShortPercent: marginShortPercent.value,
-      marginEnforcementEnabled: marginEnforcementEnabled.value,
-    },
-    parameters: selectedStrategy.value === 'smaCross' ? { ...smaParams } : { ...emaVwapParams },
-    results: results.value,
+    ...completedRun.value,
   }
   const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${symbol.value}-${selectedStrategy.value}-backtest.json`
+  link.download = `${completedRun.value.market.symbol}-${completedRun.value.strategy}-backtest.json`
   link.click()
   URL.revokeObjectURL(url)
 }
 
 /* ------------------------------------------------------------------
-   4.  KEY METRIC ØVERST (uendret)
+   4.  KEY METRIC ØVERST
 --------------------------------------------------------------------*/
 const formattedTotalPnl = computed(() => {
   if (!results.value) return { amount: '0.00 USDT', percent: '0.00%', class: '' }
 
-  const { net_profit, pnl_open, pnl_total } = results.value.summary
-
-  // 1) Prosent for Net profit
-  const netPerc = (net_profit / initialCapital.value) * 100
-
-  // 2) Prosent for Open P&L (bruk kontantsaldo etter lukkede handler)
-  const baseForOpen = initialCapital.value + net_profit
-  const openPerc = baseForOpen !== 0 ? (pnl_open / baseForOpen) * 100 : 0
-  const totalPerc = netPerc + openPerc
+  const { pnl_total } = results.value.summary
+  const capital = completedRun.value?.execution.initialCapital ?? initialCapital.value
+  const totalPerc = capital > 0 ? (pnl_total / capital) * 100 : 0
   const sign = pnl_total >= 0 ? '+' : ''
   const cls = pnl_total > 0 ? 'profit' : 'loss'
   return {
@@ -1470,17 +1481,19 @@ const processedTradeLog = computed<ProcessedTrade[]>(() => {
 
     // Verdien som vises i "Position size" (kun visning)
     const entryValDisp = priceEntryDisp * qtyForPct
-    const commissionRate = commissionPercent.value / 100
-    const commissionDisp = cent(
-      t.entry.price * qtyForPct * commissionRate +
-        (closed ? t.exit!.price * qtyForPct * commissionRate : 0),
-    )
+    const commissionDisp = cent(tradeCommission(
+      t.entry,
+      t.exit,
+      results.value?.margin_calls ?? [],
+      completedRun.value?.execution.commissionPercent ?? 0,
+    ))
     const durationBars = closed ? Math.max(0, t.exit!.bar_index - t.entry.bar_index) : undefined
     // ---------- 4. Kumulativ PnL (full presisjon), rund KUN ved visning ----
     if (closed) closedCumPrecise += pnlRaw // <- use raw P&L
     const cumPrecise = closed ? closedCumPrecise : closedCumPrecise + pnlRaw // include open trade's raw P&L in its own row
     const cumPnlDisp = cent(cumPrecise) // display value
-    const cumPct = pct2((cumPnlDisp / initialCapital.value) * 100) // beholder eksisterende (matcher allerede)
+    const capital = completedRun.value?.execution.initialCapital ?? initialCapital.value
+    const cumPct = capital ? pct2((cumPnlDisp / capital) * 100) : 0
 
     return {
       ...t,

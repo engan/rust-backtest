@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onActivated, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import FieldTooltip from '@/components/FieldTooltip.vue'
 import {
@@ -80,7 +80,7 @@ const router = useRouter()
 const reportInput = ref<HTMLInputElement | null>(null)
 const reportLabel = ref('No simulation')
 const reportMessage = ref('')
-const candidateDescription = ref('EMA 100 · High · SL 4.0% · TP 6.0%')
+const candidateDescription = ref('—')
 const selectedCandidate = ref<{
   sourceResearchJobId?: string
   candidate: Record<string, unknown>
@@ -119,6 +119,8 @@ const evidence = reactive<EvidenceSummary>({
   fullDatasetTrades: 0,
 })
 const hasFullDatasetComparison = ref(false)
+const candidateIdentity = (sourceJobId: string | undefined, candidate: Record<string, unknown> | undefined) =>
+  JSON.stringify([sourceJobId, candidate ? Object.entries(candidate).sort(([left], [right]) => left.localeCompare(right)) : null])
 
 const money = (value: number) =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
@@ -132,7 +134,7 @@ const drawdownVerdict = computed(() => {
     return 'Tail risk requires changes'
   if (summary.probabilityOfLoss >= 0.3 || summary.drawdown.p95 >= 25)
     return 'Promising, tail risk needs review'
-  return 'Robust in this simulation'
+  return 'Favorable under these assumptions'
 })
 
 const evidenceQuality = computed(() => {
@@ -143,7 +145,7 @@ const evidenceQuality = computed(() => {
   if (trades < evidence.minimumSourceTrades)
     return { label: 'Insufficient sample', tone: 'danger' }
   if (trades < 50) return { label: 'Limited OOS sample', tone: 'warning' }
-  return { label: 'Adequate OOS sample', tone: 'success' }
+  return { label: '50+ OOS trades', tone: 'success' }
 })
 
 const displayedOutOfSampleTrades = computed(() =>
@@ -170,7 +172,7 @@ const hasInsufficientPreview = computed(() => {
 })
 
 const primaryEvidenceLabel = computed(() =>
-  evidence.primary === 'legacy_full_dataset' ? 'Legacy' : 'OOS',
+  evidence.primary === 'legacy_full_dataset' ? 'Full dataset' : 'Walk-forward selection OOS',
 )
 
 const initialCapitalForChart = computed(() => selectedCandidate.value?.initialCapital ?? 10000)
@@ -236,6 +238,8 @@ const drawdownCdfPath = computed(() => {
 })
 
 const describeParameters = (parameters: Record<string, unknown>) => {
+  if (parameters.fast_period != null || parameters.slow_period != null)
+    return `SMA ${parameters.fast_period ?? '—'} / ${parameters.slow_period ?? '—'} · SL ${parameters.trailing_sl_perc ?? '—'}% · TP ${parameters.fixed_tp_for_trailing_perc ?? '—'}%`
   const ema = parameters.ema_length ?? '—'
   const source = parameters.ema_source ?? '—'
   const sl = parameters.trailing_sl_perc ?? '—'
@@ -294,6 +298,28 @@ const applyReport = (text: string, label: string) => {
   evidence.fullDatasetTrades = report.evidence?.full_dataset_trades
     ?? fullDatasetSummary.sourceTrades
 
+  const reportCandidate = parsed?.reproducibility?.candidate
+  const reportDataset = parsed?.reproducibility?.dataset
+  const reportCapital = parsed?.reproducibility?.initialCapital
+  if (reportCandidate && typeof reportCandidate === 'object') {
+    const candidateParams = reportCandidate.params && typeof reportCandidate.params === 'object'
+      ? reportCandidate.params as Record<string, unknown>
+      : reportCandidate as Record<string, unknown>
+    const sameCandidate = selectedCandidate.value
+      && candidateIdentity(selectedCandidate.value.sourceResearchJobId, selectedCandidate.value.candidate)
+        === candidateIdentity(parsed?.reproducibility?.sourceResearchJobId, reportCandidate)
+    selectedCandidate.value = {
+      sourceResearchJobId: parsed?.reproducibility?.sourceResearchJobId,
+      candidate: reportCandidate,
+      description: sameCandidate ? selectedCandidate.value!.description : describeParameters(candidateParams),
+      strategy: reportCandidate.strategy === 'sma_crossover' || candidateParams.fast_period != null
+        ? 'SMA Crossover' : 'EMA / VWAP',
+      dataset: reportDataset ?? { symbol: '—', timeframe: '—' },
+      initialCapital: Number(reportCapital) || 10000,
+    }
+    candidateDescription.value = selectedCandidate.value.description
+  }
+
   const config = parsed?.reproducibility?.config
   if (config) {
     settings.simulations = config.simulations ?? settings.simulations
@@ -307,8 +333,8 @@ const applyReport = (text: string, label: string) => {
       settings.blockSize = config.sampling.block_size ?? settings.blockSize
     } else if (config.sampling?.mode === 'bootstrap') {
       settings.sampling = 'Bootstrap'
-    } else if (config.sampling?.mode === 'permutation') {
-      settings.sampling = 'Permutation'
+    } else if (config.sampling?.mode === 'shuffle') {
+      settings.sampling = 'Shuffle'
     }
   }
 
@@ -333,6 +359,7 @@ const importReport = async (event: Event) => {
     const text = await file.text()
     applyReport(text, file.name)
     sessionStorage.setItem('monte-carlo-report', text)
+    if (selectedCandidate.value) sessionStorage.setItem('selected-research-candidate', JSON.stringify(selectedCandidate.value))
   } catch (error) {
     reportMessage.value = error instanceof Error ? error.message : 'Could not read the report.'
   } finally {
@@ -351,6 +378,16 @@ const prepareRun = async () => {
   }
   if (hasInsufficientPreview.value) {
     reportMessage.value = `Walk-forward evidence has ${displayedOutOfSampleTrades.value} closed trades; at least ${evidence.minimumSourceTrades} are required. Re-run optimization with a longer dataset.`
+    return
+  }
+  if (!Number.isSafeInteger(settings.simulations) || settings.simulations < 1 || settings.simulations > 10_000_000
+      || !Number.isSafeInteger(settings.seed) || settings.seed < 0
+      || (settings.sampling === 'Block bootstrap' && (!Number.isSafeInteger(settings.blockSize) || settings.blockSize < 1))
+      || ![settings.skipProbability, settings.pnlJitter, settings.extraCost, settings.ruinThreshold].every(Number.isFinite)
+      || settings.skipProbability < 0 || settings.skipProbability > 100
+      || settings.pnlJitter < 0 || settings.extraCost < 0
+      || settings.ruinThreshold < 0 || settings.ruinThreshold > 100) {
+    reportMessage.value = 'Check simulation settings: use a positive simulation count and block size, a non-negative seed and costs, and probabilities between 0 and 100%.'
     return
   }
   isRunning.value = true
@@ -400,13 +437,43 @@ const exportReport = () => {
   downloadResearchReport(activeReport.value, `${activeJob.value?.id ?? 'monte-carlo-report'}.json`)
 }
 
-onMounted(() => {
+onActivated(() => {
   const selection = sessionStorage.getItem('selected-research-candidate')
+  if (!selection) {
+    selectedCandidate.value = null
+    candidateDescription.value = '—'
+    Object.assign(summary, emptySummary())
+    Object.assign(fullDatasetSummary, emptySummary())
+    Object.assign(evidence, {
+      primary: 'none', minimumSourceTrades: 30, walkForwardWindows: 0,
+      outOfSampleTrades: 0, fullDatasetTrades: 0,
+    })
+    hasFullDatasetComparison.value = false
+    activeReport.value = null
+    activeJob.value = null
+    reportLabel.value = 'No simulation'
+    reportMessage.value = ''
+    return
+  }
   if (selection) {
     try {
-      selectedCandidate.value = JSON.parse(selection)
-      candidateDescription.value = selectedCandidate.value?.description ?? candidateDescription.value
-      reportLabel.value = 'Candidate selected'
+      const nextSelection = JSON.parse(selection) as NonNullable<typeof selectedCandidate.value>
+      const previousIdentity = candidateIdentity(selectedCandidate.value?.sourceResearchJobId, selectedCandidate.value?.candidate)
+      const nextIdentity = candidateIdentity(nextSelection.sourceResearchJobId, nextSelection.candidate)
+      selectedCandidate.value = nextSelection
+      candidateDescription.value = nextSelection.description
+      if (previousIdentity !== nextIdentity) {
+        Object.assign(summary, emptySummary())
+        Object.assign(fullDatasetSummary, emptySummary())
+        Object.assign(evidence, {
+          primary: 'none', minimumSourceTrades: 30, walkForwardWindows: 0,
+          outOfSampleTrades: 0, fullDatasetTrades: 0,
+        })
+        hasFullDatasetComparison.value = false
+        activeReport.value = null
+        activeJob.value = null
+        reportLabel.value = 'Candidate selected'
+      }
     } catch {
       sessionStorage.removeItem('selected-research-candidate')
     }
@@ -416,16 +483,17 @@ onMounted(() => {
   try {
     const parsed = JSON.parse(cached)
     const cachedSourceJobId = parsed?.reproducibility?.sourceResearchJobId
+    const cachedCandidate = parsed?.reproducibility?.candidate
     if (
-      selectedCandidate.value?.sourceResearchJobId
-      && cachedSourceJobId
-      && selectedCandidate.value.sourceResearchJobId !== cachedSourceJobId
+      selectedCandidate.value
+      && candidateIdentity(selectedCandidate.value.sourceResearchJobId, selectedCandidate.value.candidate)
+        !== candidateIdentity(cachedSourceJobId, cachedCandidate)
     ) {
       sessionStorage.removeItem('monte-carlo-report')
-      reportMessage.value = 'The saved Monte Carlo report belongs to another optimization job. Run a fresh simulation for this candidate.'
+      reportMessage.value = 'The saved Monte Carlo report belongs to another candidate. Run a fresh simulation for this candidate.'
       return
     }
-    applyReport(cached, 'Saved Monte Carlo report')
+    if (!activeReport.value) applyReport(cached, 'Saved Monte Carlo report')
   } catch {
     sessionStorage.removeItem('monte-carlo-report')
   }
@@ -437,7 +505,7 @@ onMounted(() => {
     <header class="research-page-header">
       <div>
         <h1>Monte Carlo Robustness</h1>
-        <p>Use walk-forward trades as primary evidence and compare them with the full dataset.</p>
+        <p>Stress the walk-forward selection process; compare a fixed selected candidate on the full dataset.</p>
       </div>
       <span class="research-status-badge">{{ reportLabel }}</span>
     </header>
@@ -460,10 +528,10 @@ onMounted(() => {
                 <dt>Evidence</dt>
                 <dd class="evidence-lines">
                   <span>
-                    Walk-forward OOS · {{ displayedOutOfSampleTrades || 'not available' }} trades
+                    Walk-forward selection OOS · {{ displayedOutOfSampleTrades || 'not available' }} trades
                     <template v-if="displayedWalkForwardWindows"> / {{ displayedWalkForwardWindows }} windows</template>
                   </span>
-                  <span>Full selected dataset · {{ displayedFullDatasetTrades || 'not available' }} trades</span>
+                  <span>Selected candidate, full dataset · {{ displayedFullDatasetTrades || 'not available' }} trades</span>
                   <span class="evidence-quality" :class="`evidence-quality--${evidenceQuality.tone}`">
                     {{ evidenceQuality.label }}
                   </span>
@@ -587,7 +655,7 @@ onMounted(() => {
         <div class="kpi-grid">
           <section class="research-card kpi-card">
             <div class="kpi-label">{{ primaryEvidenceLabel }} Median Net P&amp;L</div>
-            <div class="kpi-value metric-positive">+{{ money(summary.netProfit.p50) }} USDT</div>
+            <div class="kpi-value" :class="summary.netProfit.p50 < 0 ? 'metric-negative' : 'metric-positive'">{{ summary.simulations ? `${summary.netProfit.p50 >= 0 ? '+' : ''}${money(summary.netProfit.p50)} USDT` : '—' }}</div>
           </section>
           <section class="research-card kpi-card">
             <div class="kpi-label">{{ primaryEvidenceLabel }} 5th percentile</div>
@@ -595,16 +663,16 @@ onMounted(() => {
               class="kpi-value"
               :class="summary.netProfit.p05 < 0 ? 'metric-negative' : 'metric-positive'"
             >
-              {{ summary.netProfit.p05 >= 0 ? '+' : '' }}{{ money(summary.netProfit.p05) }} USDT
+              {{ summary.simulations ? `${summary.netProfit.p05 >= 0 ? '+' : ''}${money(summary.netProfit.p05)} USDT` : '—' }}
             </div>
           </section>
           <section class="research-card kpi-card">
             <div class="kpi-label">{{ primaryEvidenceLabel }} 95th percentile</div>
-            <div class="kpi-value metric-positive">+{{ money(summary.netProfit.p95) }} USDT</div>
+            <div class="kpi-value" :class="summary.netProfit.p95 < 0 ? 'metric-negative' : 'metric-positive'">{{ summary.simulations ? `${summary.netProfit.p95 >= 0 ? '+' : ''}${money(summary.netProfit.p95)} USDT` : '—' }}</div>
           </section>
           <section class="research-card kpi-card">
             <div class="kpi-label">{{ primaryEvidenceLabel }} Probability of loss</div>
-            <div class="kpi-value">{{ percent(summary.probabilityOfLoss) }}</div>
+            <div class="kpi-value">{{ summary.simulations ? percent(summary.probabilityOfLoss) : '—' }}</div>
           </section>
         </div>
 
@@ -617,7 +685,7 @@ onMounted(() => {
               <span>Evidence</span><span>Trades</span><span>Median P&amp;L</span><span>P05 P&amp;L</span><span>P95 DD</span><span>Loss probability</span>
             </div>
             <div class="evidence-comparison-row evidence-comparison-primary">
-              <strong>Walk-forward OOS · Primary</strong>
+              <strong>Walk-forward selection OOS · Primary</strong>
               <span>{{ summary.sourceTrades }}</span>
               <span>{{ money(summary.netProfit.p50) }} USDT</span>
               <span>{{ money(summary.netProfit.p05) }} USDT</span>
@@ -625,7 +693,7 @@ onMounted(() => {
               <span>{{ percent(summary.probabilityOfLoss) }}</span>
             </div>
             <div v-if="hasFullDatasetComparison" class="evidence-comparison-row">
-              <strong>Full dataset · Supplementary</strong>
+              <strong>Selected candidate, full dataset · Supplementary</strong>
               <span>{{ fullDatasetSummary.sourceTrades }}</span>
               <span>{{ money(fullDatasetSummary.netProfit.p50) }} USDT</span>
               <span>{{ money(fullDatasetSummary.netProfit.p05) }} USDT</span>
@@ -638,10 +706,10 @@ onMounted(() => {
         <div class="monte-main-grid">
           <section class="research-card">
             <h2 class="research-card-title">
-              {{ primaryEvidenceLabel }} Final Equity Percentiles <small>{{ summary.sourceTrades }} source trades</small>
+              {{ primaryEvidenceLabel }} Endpoint Range <small>{{ summary.sourceTrades }} source trades</small>
             </h2>
-            <div class="chart-frame">
-              <svg viewBox="0 0 760 300" role="img" aria-label="Equity path percentile fan chart">
+            <div v-if="summary.simulations" class="chart-frame">
+              <svg viewBox="0 0 760 300" role="img" aria-label="Illustrative curves from initial equity to simulated final equity percentiles; intermediate points are not simulated path percentiles">
                 <defs>
                   <linearGradient id="fan-gradient" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="0" stop-color="#58b8ff" stop-opacity="0.22" />
@@ -694,7 +762,7 @@ onMounted(() => {
                 <text x="713" :y="equityY(summary.netProfit.p50) + 4" class="chart-axis-label" fill="#49df8b">Median</text>
                 <text x="713" :y="equityY(summary.netProfit.p05) + 4" class="chart-axis-label" fill="#ff6574">P05</text>
                 <text x="380" y="287" text-anchor="middle" class="chart-axis-label">
-                  Trade count
+                  Illustrative progress
                 </text>
                 <text
                   transform="translate(14,150) rotate(-90)"
@@ -704,7 +772,9 @@ onMounted(() => {
                   Equity (USDT)
                 </text>
               </svg>
+              <p class="chart-disclaimer">Curves illustrate the final equity percentiles. Their intermediate shape is interpolated, not simulated path data.</p>
             </div>
+            <div v-else class="chart-data-notice">Run or import a Monte Carlo report to see the endpoint range.</div>
           </section>
 
           <section class="research-card">
@@ -713,26 +783,26 @@ onMounted(() => {
               <div class="risk-list">
                 <div class="risk-row">
                   <span>Probability of ruin</span
-                  ><strong>{{ percent(summary.probabilityOfRuin, 2) }}</strong>
+                  ><strong>{{ summary.simulations ? percent(summary.probabilityOfRuin, 2) : '—' }}</strong>
                 </div>
                 <div class="risk-row">
                   <span>Median max drawdown</span
-                  ><strong>{{ summary.drawdown.p50.toFixed(1) }}%</strong>
+                  ><strong>{{ summary.simulations ? `${summary.drawdown.p50.toFixed(1)}%` : '—' }}</strong>
                 </div>
                 <div class="risk-row">
                   <span>95th percentile DD</span
-                  ><strong>{{ summary.drawdown.p95.toFixed(1) }}%</strong>
+                  ><strong>{{ summary.simulations ? `${summary.drawdown.p95.toFixed(1)}%` : '—' }}</strong>
                 </div>
                 <div class="risk-row">
                   <span>Worst simulated DD</span
-                  ><strong>{{ summary.drawdown.maximum.toFixed(1) }}%</strong>
+                  ><strong>{{ summary.simulations ? `${summary.drawdown.maximum.toFixed(1)}%` : '—' }}</strong>
                 </div>
                 <div class="risk-row">
                   <span>Simulation paths</span
-                  ><strong>{{ summary.simulations.toLocaleString('en-US') }}</strong>
+                  ><strong>{{ summary.simulations ? summary.simulations.toLocaleString('en-US') : '—' }}</strong>
                 </div>
               </div>
-              <div class="verdict">{{ drawdownVerdict }}</div>
+              <div v-if="summary.simulations" class="verdict">{{ drawdownVerdict }}</div>
             </div>
           </section>
         </div>

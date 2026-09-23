@@ -5,22 +5,49 @@ now run real jobs through the native Rust research server.
 
 ## Workflow
 
-1. Configure the strategy, dataset and parameter search space in **Optimize**.
-2. Run bounded candidate searches and rank them with walk-forward
-   out-of-sample results as the primary evidence.
-3. Inspect stability, drawdown and the return/drawdown frontier before loading
-   a candidate into the normal backtest view.
-4. Run Monte Carlo with the candidate's realized walk-forward out-of-sample
-   trades as the primary evidence. The same seeded simulation is also run on
-   the full-dataset closed trades as a supplementary comparison.
-5. Save the complete job definition, seed and summary report so a result can be
-   reproduced later.
+1. Run a **Backtest**, then use **Open in Optimize** to carry the fields currently
+   visible in the Backtest form, including its strategy, requested candle count,
+   safeguards, and execution assumptions, into a research job. If the form was
+   edited after the last Backtest, run it again before comparing its displayed
+   result with Optimize. Search ranges and walk-forward settings belong to
+   Optimize and are chosen separately. Expand **Base strategy settings** to
+   inspect every carried strategy parameter.
+   The search table follows the chosen strategy and SL/TP method: EMA/VWAP and
+   SMA have their own signal axes, and risk-based, fixed, trailing, and combined
+   exits show only the relevant stop/target axes. Suggested ranges include the
+   current Backtest values. A warning identifies any current value excluded by
+   later edits to a range or categorical selection. After **Open in Optimize**,
+   the table initially shows only enabled search axes. **Show additional
+   parameters** reveals the other applicable axes if you want to vary them;
+   hidden settings retain their Backtest values in every candidate.
+2. Run the search. **Best Candidates** ranks the top ten by full-dataset
+   results. The walk-forward summary separately shows how often the rolling
+   training procedure selected each candidate and how those selections
+   performed in their subsequent out-of-sample windows. A selected candidate's
+   OOS subset is not a fixed-candidate OOS test over every window. The headline
+   compounds window returns; the candidate detail sums window P&L, so their
+   amounts can differ. OOS equity P&L can include an open position at a window
+   boundary; Monte Carlo resamples only closed-trade P&L. The window table shows
+   both amounts.
+3. Choose a candidate for Monte Carlo. The primary simulation samples the
+   combined out-of-sample trades from the adaptive walk-forward selection
+   process. A supplementary simulation samples that one candidate's trades on
+   the full dataset. These are different sources of evidence and are labeled
+   separately in the UI.
+   Monte Carlo stresses the observed trade outcomes and their order. It cannot
+   establish that a parameter set was not selected by overfitting the same
+   historical data; keep a genuinely untouched later period for that check.
+4. Export the complete job definition, seed and summary report to reproduce a
+   result later. Importing a report restores its candidate and assumptions.
 
 Monte Carlo requires at least 30 closed trades in both evidence sets. A shorter
 walk-forward sample is shown in the UI but cannot be simulated, because its
 percentiles and tail-risk estimates would be too unstable for a useful
 robustness decision. The report keeps the OOS and full-dataset summaries
 separate and records their trade counts and walk-forward window count.
+The endpoint-range panel uses the simulated final equity percentiles. Its
+connecting curves are illustrations, not measured intermediate path
+percentiles; the histograms contain the actual simulated distributions.
 
 The browser edits and displays research jobs. Candidate searches, walk-forward
 validation, and Monte Carlo run in the native Rust runner instead of blocking
@@ -31,17 +58,23 @@ loopback-only server on `127.0.0.1:8787`.
 Every job writes `request.json` and `report.json` below the private engine's
 ignored `research-results/<job-id>/` directory. Reports include the engine
 version, complete configuration, parameter grid, seed, dataset timestamps, bar
-count, and SHA-256 dataset fingerprint. They can also be exported or imported
+count, requested candle count, and SHA-256 dataset fingerprint. The Dataset
+input restores the requested count; the fingerprint records how many candles
+were actually fetched. They can also be exported or imported
 from the browser. A database is unnecessary for this single-user phase.
 
-Parameter values belong to each job definition. The optimization engine should
-receive a complete base configuration plus explicitly selected axes, so adding
-or changing a parameter does not require changing numeric constants in engine
-code.
+Parameter values belong to each job definition. The optimization engine
+receives the Backtest base configuration and explicitly selected search axes,
+so changing a parameter does not require changing numeric constants in engine
+code. Full-dataset eligibility thresholds apply to full-dataset candidate
+ranking; training thresholds apply within each walk-forward window. Neither
+threshold is a claim that an OOS result passed independently.
 
 ## Local development
 
-`pnpm run dev` starts both Vite and the native research server. The private
+`npm run dev` (or `pnpm run dev` where pnpm is available) starts both Vite and
+the native research server. Starting Vite alone leaves Optimize unable to
+submit jobs; the UI reports that port 8787 is unavailable. The private
 engine repository must be available as the sibling directory
 `../rust-backtest-proprietary`.
 
