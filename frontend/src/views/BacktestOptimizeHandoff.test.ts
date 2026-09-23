@@ -99,8 +99,10 @@ describe('Open in Optimize', () => {
       strategy: 'emaVwap',
       market: { symbol: 'BTCUSDT', timeframe: '4h', dataLimit: 4321, endBeforeUtc: '2026-08-31T12:00' },
       parameters: {
-        ema_length: 137, ema_source: 'Low', trade_direction: 'Short',
+        ema_length: 137, ema_source: 'Low', vwap_anchor_period: 'Month', trade_direction: 'Short',
         enable_max_drawdown: true, max_drawdown_perc: 9,
+        enable_dmi_filter: true, dmi_length: 8, dmi_threshold: 13,
+        adx_resume_threshold: 17,
       },
       execution: {
         initialCapital: 25000, commissionPercent: 0.08, slippageTicks: 3,
@@ -134,12 +136,49 @@ describe('Open in Optimize', () => {
     expect((wrapper.get('#research-round-tick').element as HTMLInputElement).checked).toBe(true)
     expect(wrapper.get('.base-settings-details').text()).toContain('max drawdown perc')
     expect(wrapper.get('.base-settings-details').text()).toContain('Current Backtest form')
-    expect(wrapper.find('input[aria-label="Optimize VWAP Anchor"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="Optimize VWAP Anchor"]').exists()).toBe(true)
     expect(wrapper.find('input[aria-label="Optimize EMA Length"]').exists()).toBe(true)
-    await wrapper.get('.research-axis-toggle').trigger('click')
+    expect(wrapper.text()).toContain('Fixed at Month')
+    expect(wrapper.text()).toContain('Fixed at 9')
+    expect(wrapper.text()).toContain('ADX filter')
+    expect(wrapper.text()).toContain('Fixed at 17')
+    expect(wrapper.find('input[aria-label="Optimize ADX resume at"]').exists()).toBe(true)
+    expect(wrapper.find('.research-axis-toggle').exists()).toBe(false)
     await wrapper.get('input[aria-label="Optimize VWAP Anchor"]').setValue(true)
-    await wrapper.get('.research-axis-toggle').trigger('click')
     expect((wrapper.get('input[aria-label="Optimize VWAP Anchor"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('input[aria-label="VWAP Anchor: Month"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('changes the visible exit controls when the SL/TP method changes', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/optimize', component: OptimizeView }],
+    })
+    await router.push('/optimize')
+    await router.isReady()
+    const wrapper = mount(OptimizeView, { global: { plugins: [router], stubs: { FieldTooltip: true } } })
+    const has = (label: string) => wrapper.find(`input[aria-label="Optimize ${label}"]`).exists()
+
+    expect(has('Trailing SL %')).toBe(true)
+    expect(has('Static TP %')).toBe(true)
+    expect(has('Fixed SL %')).toBe(false)
+
+    await wrapper.get('#research-stop-method').setValue('Combined')
+    expect(has('Fixed SL %')).toBe(true)
+    expect(has('Trailing SL %')).toBe(true)
+
+    await wrapper.get('#research-stop-method').setValue('FixedPercent')
+    expect(has('Fixed SL %')).toBe(true)
+    expect(has('Fixed TP %')).toBe(true)
+    expect(has('Trailing SL %')).toBe(false)
+
+    await wrapper.get('#research-stop-method').setValue('RiskBased')
+    expect(has('Risk per trade %')).toBe(true)
+    expect(has('ATR stop multiplier')).toBe(true)
+    expect(has('Reward / risk')).toBe(true)
+    expect(has('Fixed SL %')).toBe(false)
+    expect(has('ADX resume at')).toBe(true)
     wrapper.unmount()
   })
 

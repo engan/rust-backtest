@@ -208,8 +208,6 @@
 
 .research-method-field { max-width: 370px; margin-bottom: 0.55rem; }
 .research-axis-intro { margin: 0 0 0.75rem; color: var(--research-muted); font-size: 0.76rem; line-height: 1.4; }
-.research-axis-toggle { margin-top: 0.7rem; }
-.research-axis-fixed-note { margin: 0.65rem 0 0; color: var(--research-muted); font-size: 0.75rem; line-height: 1.4; }
 .research-axis-warning { margin-top: 0.65rem; border-color: #a77335; color: #ffd39d; }
 .axis-group-row {
   padding: 0.4rem 0.62rem;
@@ -283,6 +281,12 @@
   font-size: 0.75rem;
 }
 
+.axis-fixed-value {
+  color: #c3d4e3;
+  font-size: 0.79rem;
+  font-weight: 600;
+}
+
 .axis-values {
   display: flex;
   flex-wrap: wrap;
@@ -305,8 +309,6 @@
 .research-view .axis-choice input[type='checkbox'] {
   flex: 0 0 16px;
 }
-
-.axis-choice:has(input:disabled) { opacity: 0.6; cursor: default; }
 
 .research-summary-line {
   display: flex;

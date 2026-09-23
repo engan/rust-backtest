@@ -99,7 +99,7 @@ export const createResearchAxes = (strategy: string, base: Record<string, unknow
 
   const method = String(base.sl_tp_method ?? 'TrailingPercent')
   if (method === 'RiskBased' || lateMode === 'Atr') {
-    axes.push(numeric('atr_length', 'ATR Length', 'Risk & exits', base.atr_length, 2, 2, false, 1, true))
+    axes.push(numeric('atr_length', 'ATR Length', method === 'RiskBased' ? 'Risk & exits' : 'Entry', base.atr_length, 2, 2, false, 1, true))
   }
   if (method === 'RiskBased') {
     axes.push(
@@ -140,6 +140,7 @@ export const createResearchAxes = (strategy: string, base: Record<string, unknow
       numeric('dmi_length', 'DMI Length', 'ADX filter', base.dmi_length, 1, 2, false, 1, true),
       numeric('dmi_smoothing', 'ADX Smoothing', 'ADX filter', base.dmi_smoothing, 2, 2, false, 1, true),
       pause,
+      numeric('adx_resume_threshold', 'ADX resume at', 'ADX filter', base.adx_resume_threshold, 0.5, 2),
       numeric('adx_resume_bars', 'ADX confirmation bars', 'ADX filter', base.adx_resume_bars, 1, 2, false, 1, true),
     )
   }

@@ -141,13 +141,11 @@ const axisHelp: Record<string, string> = {
   fashionably_late_mode: 'Choose which Fashionably Late entry modes to compare.',
   trailing_sl_percent: 'Trailing stop percentages for the selected SL/TP method.',
   static_tp_percent: 'Take-profit percentages paired with the trailing or combined stop.',
-  dmi_threshold: 'ADX pause values must not exceed the fixed ADX resume threshold.',
+  dmi_threshold: 'The highest ADX pause value must not exceed the lowest ADX resume value.',
+  adx_resume_threshold: 'ADX must reach this value before entries can resume. Keep it at or above every tested pause value.',
 }
 
 const axes = reactive<ResearchAxis[]>([])
-const showAdditionalAxes = ref(true)
-const displayedAxes = computed(() => showAdditionalAxes.value ? axes : axes.filter((axis) => axis.enabled))
-const additionalAxisCount = computed(() => axes.filter((axis) => !axis.enabled).length)
 const replaceAxes = () => axes.splice(0, axes.length, ...createResearchAxes(setup.strategy, baseParams.value))
 const stopMethod = computed({
   get: () => String(baseParams.value.sl_tp_method ?? 'TrailingPercent'),
@@ -497,9 +495,12 @@ const prepareRun = async () => {
     reportMessage.value = `${invalidWholeNumberAxis.value.label} needs whole-number start, end and step values.`
     return
   }
-  const adxPause = axes.find((axis) => axis.id === 'dmi_threshold' && axis.enabled)
-  if (adxPause?.type === 'numeric' && adxPause.max > Number(baseParams.value.adx_resume_threshold)) {
-    reportMessage.value = 'The highest ADX pause value must not exceed the current ADX resume threshold.'
+  const adxPause = axes.find((axis) => axis.id === 'dmi_threshold')
+  const adxResume = axes.find((axis) => axis.id === 'adx_resume_threshold')
+  const highestPause = adxPause?.type === 'numeric' && adxPause.enabled ? adxPause.max : Number(baseParams.value.dmi_threshold)
+  const lowestResume = adxResume?.type === 'numeric' && adxResume.enabled ? adxResume.min : Number(baseParams.value.adx_resume_threshold)
+  if (baseParams.value.enable_dmi_filter === true && highestPause > lowestResume) {
+    reportMessage.value = 'The highest ADX pause value must not exceed the lowest ADX resume value.'
     return
   }
   if (![validation.trainDays, validation.validateDays, validation.stepDays].every((days) => Number.isFinite(days) && days > 0)) {
@@ -609,7 +610,6 @@ onMounted(() => {
 onActivated(() => {
   const handoff = consumeResearchHandoff()
   if (!handoff) return
-  showAdditionalAxes.value = false
   setup.strategy = handoff.strategy === 'smaCross' ? 'SMA Crossover' : 'EMA / VWAP'
   setup.symbol = handoff.market.symbol
   setup.timeframe = handoff.market.timeframe
@@ -629,7 +629,7 @@ onActivated(() => {
   activeReport.value = null
   activeJob.value = null
   reportLabel.value = 'Not run'
-  reportMessage.value = 'Loaded all current Backtest fields, including the dataset, strategy safeguards and execution settings. Search ranges are separate; review them before running optimization.'
+  reportMessage.value = 'Loaded the current Backtest setup. Fixed values and active search ranges are shown below; review them or run optimization.'
   sessionStorage.removeItem('research-report')
   sessionStorage.removeItem('selected-research-candidate')
   sessionStorage.removeItem('monte-carlo-report')
@@ -788,7 +788,9 @@ onActivated(() => {
               </select>
               <FieldTooltip label="SL/TP method" text="The selected method determines which stop and target parameters actually affect the strategy. Changing it here changes the base strategy for this research job." />
             </div>
-            <p class="research-axis-intro">Search ranges start around the current Backtest values. Enabled fields vary between candidates; other strategy settings stay fixed.</p>
+            <p class="research-axis-intro">Current strategy values · {{ baseSettingsSource }}. Checked parameters vary between candidates; unchecked parameters stay fixed at the shown value. You can run now or adjust the search.</p>
+            <p v-if="stopMethod !== 'RiskBased'" class="research-axis-intro">Order size stays fixed at {{ formatBaseValue(baseParams.order_size_value) }} {{ { percentOfEquity: '% equity', fixedQuantity: 'units', fixedValue: 'USDT' }[String(baseParams.order_size_mode) as 'percentOfEquity' | 'fixedQuantity' | 'fixedValue'] ?? String(baseParams.order_size_mode) }} for this job.</p>
+            <p v-else class="research-axis-intro">Risk-based position size is calculated from Risk per trade and Position gearing; the Backtest order-size field does not apply.</p>
             <div class="axis-table">
               <div class="axis-row axis-head">
                 <div class="axis-cell">Parameter</div>
@@ -797,8 +799,8 @@ onActivated(() => {
                 <div class="axis-cell">Count</div>
               </div>
 
-              <template v-for="(axis, index) in displayedAxes" :key="axis.id">
-              <div v-if="index === 0 || axis.group !== displayedAxes[index - 1]?.group" class="axis-group-row">{{ axis.group }}</div>
+              <template v-for="(axis, index) in axes" :key="axis.id">
+              <div v-if="index === 0 || axis.group !== axes[index - 1]?.group" class="axis-group-row">{{ axis.group }}</div>
               <div class="axis-row">
                 <div class="axis-cell axis-name axis-name-with-help">
                   <span>{{ axis.label }}<small>Current: {{ axis.type === 'values' ? choiceLabel(axis.baseValue) : number(axis.baseValue, Number.isInteger(axis.baseValue) ? 0 : 2) }}</small></span>
@@ -812,22 +814,22 @@ onActivated(() => {
                   />
                 </div>
                 <div class="axis-cell">
-                  <div v-if="axis.type === 'numeric'" class="axis-range">
-                    <input v-model.number="axis.min" type="number" :step="axis.wholeNumbers ? 1 : 'any'" :disabled="!axis.enabled" />
+                  <div v-if="!axis.enabled" class="axis-fixed-value">Fixed at {{ axis.type === 'values' ? choiceLabel(axis.baseValue) : number(axis.baseValue, Number.isInteger(axis.baseValue) ? 0 : 2) }}</div>
+                  <div v-else-if="axis.type === 'numeric'" class="axis-range">
+                    <input v-model.number="axis.min" type="number" :step="axis.wholeNumbers ? 1 : 'any'" />
                     <span>to</span>
-                    <input v-model.number="axis.max" type="number" :step="axis.wholeNumbers ? 1 : 'any'" :disabled="!axis.enabled" />
+                    <input v-model.number="axis.max" type="number" :step="axis.wholeNumbers ? 1 : 'any'" />
                     <span>step</span>
                     <input
                       v-model.number="axis.step"
                       type="number"
                       :min="axis.wholeNumbers ? 1 : 0.0001"
                       :step="axis.wholeNumbers ? 1 : 'any'"
-                      :disabled="!axis.enabled"
                     />
                   </div>
                   <div v-else class="axis-values">
                     <label v-for="option in axis.options" :key="option" class="axis-choice">
-                      <input type="checkbox" :checked="axis.values.includes(option)" :disabled="!axis.enabled" :aria-label="`${axis.label}: ${choiceLabel(option)}`" @change="changeAxisChoice(axis, option, $event)" />
+                      <input type="checkbox" :checked="axis.values.includes(option)" :aria-label="`${axis.label}: ${choiceLabel(option)}`" @change="changeAxisChoice(axis, option, $event)" />
                       {{ choiceLabel(option) }}
                     </label>
                   </div>
@@ -836,17 +838,6 @@ onActivated(() => {
               </div>
               </template>
             </div>
-            <button
-              v-if="additionalAxisCount"
-              class="research-secondary research-axis-toggle"
-              type="button"
-              :aria-expanded="showAdditionalAxes"
-              @click="showAdditionalAxes = !showAdditionalAxes"
-            >
-              {{ showAdditionalAxes ? 'Hide' : 'Show' }} {{ additionalAxisCount }} additional parameters
-            </button>
-            <p v-if="!showAdditionalAxes && additionalAxisCount" class="research-axis-fixed-note">Hidden parameters keep their current Backtest values. Show them to add more search ranges.</p>
-
             <div class="research-summary-line">
               <span
                 ><strong>{{ number(candidateCount) }}</strong> combinations</span

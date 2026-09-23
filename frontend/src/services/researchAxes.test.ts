@@ -30,15 +30,28 @@ describe('strategy-aware optimization axes', () => {
     expect(axes.map((axis) => axis.id)).not.toContain('fixed_tp_percent')
   })
 
-  it('shows only the active stop family and strategy signal family', () => {
-    const fixed = createResearchAxes('SMA Crossover', { ...base, sl_tp_method: 'FixedPercent' })
-    const risk = createResearchAxes('EMA / VWAP', { ...base, sl_tp_method: 'RiskBased' })
-    expect(fixed.map((axis) => axis.id)).toContain('fixed_sl_percent')
-    expect(fixed.map((axis) => axis.id)).not.toContain('trailing_sl_percent')
-    expect(fixed.map((axis) => axis.id)).not.toContain('ema_source')
-    expect(risk.map((axis) => axis.id)).toContain('atr_multiplier')
-    expect(risk.map((axis) => axis.id)).toContain('risk_percent')
-    expect(risk.map((axis) => axis.id)).not.toContain('static_tp_percent')
+  it.each([
+    ['RiskBased', ['atr_length', 'risk_percent', 'atr_multiplier', 'reward_risk_ratio']],
+    ['FixedPercent', ['fixed_sl_percent', 'fixed_tp_percent']],
+    ['TrailingPercent', ['trailing_sl_percent', 'static_tp_percent']],
+    ['Combined', ['fixed_sl_percent', 'trailing_sl_percent', 'static_tp_percent']],
+  ])('shows exactly the relevant Risk & exits fields for %s', (method, expected) => {
+    const axes = createResearchAxes('EMA / VWAP', { ...base, sl_tp_method: method })
+    expect(axes.filter((axis) => axis.group === 'Risk & exits').map((axis) => axis.id))
+      .toEqual([...expected, 'risk_gearing'])
+    expect(axes.find((axis) => axis.id === 'atr_length')?.group)
+      .toBe(method === 'RiskBased' ? 'Risk & exits' : undefined)
+    expect(axes.filter((axis) => axis.group === 'ADX filter').map((axis) => axis.id))
+      .toEqual(['dmi_length', 'dmi_smoothing', 'dmi_threshold', 'adx_resume_threshold', 'adx_resume_bars'])
+    expect(axes.find((axis) => axis.id === 'adx_resume_threshold')?.baseValue).toBe(16)
+  })
+
+  it('uses the Entry group for ATR length when only Fashionably Late needs it', () => {
+    const axes = createResearchAxes('SMA Crossover', {
+      ...base, sl_tp_method: 'TrailingPercent', fashionably_late_mode: 'Atr',
+    })
+    expect(axes.find((axis) => axis.id === 'atr_length')?.group).toBe('Entry')
+    expect(axes.map((axis) => axis.id)).not.toContain('ema_source')
   })
 
   it('hides inactive safeguards and applies selected categorical values', () => {
