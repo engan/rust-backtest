@@ -9,10 +9,17 @@ now run real jobs through the native Rust research server.
    visible in the Backtest form, including its strategy, requested candle count,
    safeguards, and execution assumptions, into a research job. If the form was
    edited after the last Backtest, run it again before comparing its displayed
-   result with Optimize. Search ranges and walk-forward settings belong to
-   Optimize and are chosen separately. Expand **Base strategy settings** to
-   inspect every carried strategy parameter.
-   The search table follows the chosen strategy and SL/TP method: EMA/VWAP and
+   result with Optimize. Walk-forward settings belong to Optimize and are chosen
+   separately. The default **Automatic comparison** runs four bounded searches
+   on the same fetched candles, costs, safeguards, and walk-forward windows: one
+   each for Risk-based, Fixed %, Trailing %, and Combined SL/TP. It varies the
+   main signal parameters and only the exits relevant to each method. ADX,
+   gearing, order size, and risk settings remain at their Backtest values in
+   this first pass. It does not assume the Backtest method is the winner.
+   **Manual search** remains available for choosing exact ranges and varying
+   other applicable settings. Expand **Base strategy settings** there to inspect
+   every carried strategy parameter.
+   The manual search table follows the chosen strategy and SL/TP method: EMA/VWAP and
    SMA have their own signal axes, and risk-based, fixed, trailing, and combined
    exits show only the relevant stop/target axes. Suggested ranges include the
    current Backtest values. A warning identifies any current value excluded by
@@ -20,8 +27,15 @@ now run real jobs through the native Rust research server.
    the table initially shows only enabled search axes. **Show additional
    parameters** reveals the other applicable axes if you want to vary them;
    hidden settings retain their Backtest values in every candidate.
-2. Run the search. **Best Candidates** ranks the top ten by full-dataset
-   results. The walk-forward summary separately shows how often the rolling
+2. Run the automatic comparison or a manual search. The automatic table ranks
+   methods by compounded out-of-sample (OOS) equity P&L divided by the larger
+   of their worst OOS drawdown or 5%. A method receives **Pass** only with the
+   configured minimum OOS trades, positive OOS P&L, drawdown within the
+   configured limit, at least two validation windows, and at least half of
+   those windows profitable. Select a method to inspect its detailed report.
+   **Best Candidates** ranks the top ten *within that method* by full-dataset
+   results; it is not the OOS method ranking. The walk-forward summary
+   separately shows how often the rolling
    training procedure selected each candidate and how those selections
    performed in their subsequent out-of-sample windows. A selected candidate's
    OOS subset is not a fixed-candidate OOS test over every window. The headline
@@ -37,8 +51,15 @@ now run real jobs through the native Rust research server.
    Monte Carlo stresses the observed trade outcomes and their order. It cannot
    establish that a parameter set was not selected by overfitting the same
    historical data; keep a genuinely untouched later period for that check.
-4. Export the complete job definition, seed and summary report to reproduce a
-   result later. Importing a report restores its candidate and assumptions.
+4. Export the automatic comparison to retain all four job reports together, or
+   export the selected job alone. Import restores the associated assumptions
+   and selection. Automatic comparison can also be restored from browser session
+   storage during the same session.
+
+The automatic leader is provisional: the four methods were compared on the
+same OOS history, so choosing among them uses that history for selection. Keep
+a genuinely untouched later period for the final check, and do not interpret
+Monte Carlo as a test that removes this selection bias.
 
 Monte Carlo requires at least 30 closed trades in both evidence sets. A shorter
 walk-forward sample is shown in the UI but cannot be simulated, because its

@@ -121,6 +121,8 @@ describe('Open in Optimize', () => {
     })
     const wrapper = mount(host, { global: { plugins: [router], stubs: { FieldTooltip: true } } })
     await flushPromises()
+    expect(wrapper.text()).toContain('Automatic strategy comparison')
+    await wrapper.get('.research-mode-switch button:nth-child(2)').trigger('click')
 
     expect((wrapper.get('#research-strategy').element as HTMLSelectElement).value).toBe('EMA / VWAP')
     expect((wrapper.get('#research-symbol').element as HTMLInputElement).value).toBe('BTCUSDT')
@@ -158,6 +160,7 @@ describe('Open in Optimize', () => {
     await router.push('/optimize')
     await router.isReady()
     const wrapper = mount(OptimizeView, { global: { plugins: [router], stubs: { FieldTooltip: true } } })
+    await wrapper.get('.research-mode-switch button:nth-child(2)').trigger('click')
     const has = (label: string) => wrapper.find(`input[aria-label="Optimize ${label}"]`).exists()
 
     expect(has('Trailing SL %')).toBe(true)

@@ -10,7 +10,7 @@ The Rust strategy source and Pine scripts are maintained in the private `engan/r
 | --- | --- | --- |
 | Backtest | SMA Crossover and EMA / VWAP, configurable entries, exits, sizing, costs, safeguards, and optional leverage/margin-call simulation | Bundled Wasm and Binance candle data via `/binance-proxy` |
 | Results | Equity and drawdown chart, recent trades, full trade list, report export, and Performance Analysis | A completed backtest in the current browser session |
-| Optimize | Bounded parameter search, walk-forward validation, ranked candidates, report import/export | Private native Rust research server to start new jobs |
+| Optimize | One-click comparison of four SL/TP methods on shared data and walk-forward windows; manual bounded search, ranked candidates, report import/export | Private native Rust research server to start new jobs |
 | Monte Carlo | Simulations using a candidate's closed trades, distribution charts, risk summary, report import/export | Private native Rust research server to start new jobs; at least 30 closed trades in each required evidence set |
 
 The Optimize and Monte Carlo pages are functional with the private local service. Their presence in the frontend does **not** mean a public job service is deployed. See [research workflow and evidence requirements](docs/research-ui.md).
