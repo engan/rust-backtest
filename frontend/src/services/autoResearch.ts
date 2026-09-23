@@ -20,6 +20,13 @@ export type AutoFamilyGrid = {
   }
 }
 
+export const AUTO_REFINEMENT = {
+  top_seeds: 6,
+  exit_factors: [0.75, 1, 1.3],
+  length_offsets: [-4, 0, 4],
+  max_refined_candidates: 768,
+} as const
+
 const unique = <T>(values: T[]): T[] => [...new Set(values)]
 const rounded = (value: number, whole: boolean): number => whole ? Math.round(value) : Number(value.toFixed(4))
 
@@ -29,7 +36,8 @@ const around = (axis: ResearchAxis): number[] => {
   return unique([0.8, 1, 1.2].map((factor) => Math.max(floor, rounded(axis.baseValue * factor, axis.wholeNumbers))))
 }
 
-/** A deliberately bounded first pass. Risk limits, gearing, ADX and costs remain fixed. */
+/** Broad structural search. Exit values are refined *inside each training window*
+ * by the native runner, so no validation bars choose search ranges or seeds. */
 export const createAutoFamilyGrids = (
   strategy: string,
   base: Record<string, unknown>,
@@ -37,16 +45,9 @@ export const createAutoFamilyGrids = (
   const params = { ...base, sl_tp_method: method }
   const relevant = createResearchAxes(strategy, params)
   const chosen = strategy === 'EMA / VWAP'
-    ? ['ema_length', 'ema_source']
-    : ['sma_fast_period', 'sma_slow_period']
-  const exits = method === 'RiskBased'
-    ? ['atr_multiplier', 'reward_risk_ratio']
-    : method === 'FixedPercent'
-      ? ['fixed_sl_percent', 'fixed_tp_percent']
-      : method === 'Combined'
-        ? ['fixed_sl_percent', 'trailing_sl_percent', 'static_tp_percent']
-        : ['trailing_sl_percent', 'static_tp_percent']
-  const axes = [...chosen, ...exits].map((id) => {
+    ? ['ema_length', 'ema_source', 'vwap_anchor_period', 'vwap_source', 'fashionably_late_mode']
+    : ['sma_fast_period', 'sma_slow_period', 'fashionably_late_mode']
+  const axes = chosen.map((id) => {
     const axis = relevant.find((item) => item.id === id)
     if (!axis) throw new Error(`Automatic search cannot find ${id} for ${method}.`)
     let values: Array<number | string>
@@ -54,7 +55,16 @@ export const createAutoFamilyGrids = (
       values = around(axis)
       if (id === 'sma_slow_period') values = unique([axis.baseValue, values[2] ?? axis.baseValue])
     } else {
-      values = unique([axis.baseValue, axis.baseValue === 'High' ? 'Low' : 'High'])
+      values = id === 'ema_source'
+        ? unique([axis.baseValue, 'High', 'Low', 'HLC3'])
+        : id === 'vwap_source'
+          ? unique([axis.baseValue, 'Low', 'HLC3'])
+          : id === 'vwap_anchor_period'
+            ? unique([axis.baseValue, 'Week', 'Day'])
+            : id === 'fashionably_late_mode'
+              ? unique([axis.baseValue, 'Off', 'OnClose', 'OnHighLow', 'Atr'])
+              : [axis.baseValue]
+      values = values.filter((value) => axis.options.includes(String(value)))
     }
     if (!values.length || values.some((value) => typeof value === 'number' && (!Number.isFinite(value) || value <= 0))) {
       throw new Error(`Automatic search needs a positive, finite ${axis.label} value.`)

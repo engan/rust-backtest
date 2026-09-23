@@ -45,6 +45,14 @@ type EvidenceSummary = {
   fullDatasetTrades: number
 }
 
+type HoldoutEvidence = {
+  jobId: string
+  trades: number
+  pnl: number
+  drawdown: number
+  profitFactor: number
+}
+
 type MonteCarloReportResult = {
   simulations?: number
   source_trades?: number
@@ -86,6 +94,8 @@ const selectedCandidate = ref<{
   candidate: Record<string, unknown>
   description: string
   strategy: string
+  fixedCandidateScope?: 'research_period' | 'full_dataset'
+  holdoutEvidence?: HoldoutEvidence | null
   dataset: { symbol: string; timeframe: string; endBeforeUtc?: string | null }
   initialCapital: number
   evidencePreview?: {
@@ -119,6 +129,9 @@ const evidence = reactive<EvidenceSummary>({
   fullDatasetTrades: 0,
 })
 const hasFullDatasetComparison = ref(false)
+const fixedCandidateScope = ref<'research_period' | 'full_dataset'>('full_dataset')
+const holdoutEvidence = ref<HoldoutEvidence | null>(null)
+const fixedCandidateScopeLabel = computed(() => fixedCandidateScope.value === 'research_period' ? 'research period' : 'full dataset')
 const candidateIdentity = (sourceJobId: string | undefined, candidate: Record<string, unknown> | undefined) =>
   JSON.stringify([sourceJobId, candidate ? Object.entries(candidate).sort(([left], [right]) => left.localeCompare(right)) : null])
 
@@ -128,6 +141,10 @@ const money = (value: number) =>
 const percent = (value: number, digits = 1) => `${(value * 100).toFixed(digits)}%`
 
 const drawdownVerdict = computed(() => {
+  if (holdoutEvidence.value && holdoutEvidence.value.pnl <= 0)
+    return 'Final holdout did not confirm the setup'
+  if (holdoutEvidence.value && holdoutEvidence.value.trades < 30)
+    return 'Limited final holdout evidence'
   if (summary.sourceTrades < evidence.minimumSourceTrades) return 'Insufficient trade evidence'
   if (evidence.primary !== 'walk_forward_oos') return 'Re-run with walk-forward evidence'
   if (summary.probabilityOfRuin >= 0.05 || summary.drawdown.p95 >= 40)
@@ -299,6 +316,12 @@ const applyReport = (text: string, label: string) => {
     ?? fullDatasetSummary.sourceTrades
 
   const reportCandidate = parsed?.reproducibility?.candidate
+  const reportScope = parsed?.reproducibility?.fixedCandidateScope
+  fixedCandidateScope.value = reportScope === 'research_period' ? 'research_period' : selectedCandidate.value?.fixedCandidateScope ?? 'full_dataset'
+  const reportHoldout = parsed?.reproducibility?.holdoutEvidence
+  holdoutEvidence.value = reportHoldout && typeof reportHoldout.trades === 'number' && typeof reportHoldout.pnl === 'number'
+    ? reportHoldout as HoldoutEvidence
+    : selectedCandidate.value?.holdoutEvidence ?? null
   const reportDataset = parsed?.reproducibility?.dataset
   const reportCapital = parsed?.reproducibility?.initialCapital
   if (reportCandidate && typeof reportCandidate === 'object') {
@@ -314,6 +337,8 @@ const applyReport = (text: string, label: string) => {
       description: sameCandidate ? selectedCandidate.value!.description : describeParameters(candidateParams),
       strategy: reportCandidate.strategy === 'sma_crossover' || candidateParams.fast_period != null
         ? 'SMA Crossover' : 'EMA / VWAP',
+      fixedCandidateScope: fixedCandidateScope.value,
+      holdoutEvidence: holdoutEvidence.value,
       dataset: reportDataset ?? { symbol: '—', timeframe: '—' },
       initialCapital: Number(reportCapital) || 10000,
     }
@@ -412,6 +437,8 @@ const prepareRun = async () => {
       dataset: selectedCandidate.value.dataset,
       candidate: selectedCandidate.value.candidate,
       sourceResearchJobId: selectedCandidate.value.sourceResearchJobId,
+      fixedCandidateScope: selectedCandidate.value.fixedCandidateScope ?? 'full_dataset',
+      holdoutEvidence: holdoutEvidence.value,
     })
     activeJob.value = job
     await waitForResearchJob(job.id, (progress) => {
@@ -422,7 +449,7 @@ const prepareRun = async () => {
     applyReport(JSON.stringify(report), 'Native Rust report')
     activeReport.value = report
     reportLabel.value = 'Native Rust report'
-    reportMessage.value = `Completed and saved as ${job.id}. Primary evidence: ${summary.sourceTrades} OOS trades across ${evidence.walkForwardWindows} windows; supplementary evidence: ${fullDatasetSummary.sourceTrades} full-dataset trades.`
+    reportMessage.value = `Completed and saved as ${job.id}. Primary evidence: ${summary.sourceTrades} OOS trades across ${evidence.walkForwardWindows} windows; supplementary evidence: ${fullDatasetSummary.sourceTrades} ${fixedCandidateScopeLabel.value} trades.`
     sessionStorage.setItem('monte-carlo-report', JSON.stringify(report))
   } catch (error) {
     reportLabel.value = 'Failed'
@@ -441,6 +468,8 @@ onActivated(() => {
   const selection = sessionStorage.getItem('selected-research-candidate')
   if (!selection) {
     selectedCandidate.value = null
+    fixedCandidateScope.value = 'full_dataset'
+    holdoutEvidence.value = null
     candidateDescription.value = '—'
     Object.assign(summary, emptySummary())
     Object.assign(fullDatasetSummary, emptySummary())
@@ -461,6 +490,8 @@ onActivated(() => {
       const previousIdentity = candidateIdentity(selectedCandidate.value?.sourceResearchJobId, selectedCandidate.value?.candidate)
       const nextIdentity = candidateIdentity(nextSelection.sourceResearchJobId, nextSelection.candidate)
       selectedCandidate.value = nextSelection
+      fixedCandidateScope.value = nextSelection.fixedCandidateScope ?? 'full_dataset'
+      holdoutEvidence.value = nextSelection.holdoutEvidence ?? null
       candidateDescription.value = nextSelection.description
       if (previousIdentity !== nextIdentity) {
         Object.assign(summary, emptySummary())
@@ -493,7 +524,10 @@ onActivated(() => {
       reportMessage.value = 'The saved Monte Carlo report belongs to another candidate. Run a fresh simulation for this candidate.'
       return
     }
-    if (!activeReport.value) applyReport(cached, 'Saved Monte Carlo report')
+    if (!activeReport.value || (activeReport.value as { job?: { id?: string } }).job?.id !== parsed?.job?.id) {
+      applyReport(cached, 'Saved Monte Carlo report')
+      activeReport.value = parsed
+    }
   } catch {
     sessionStorage.removeItem('monte-carlo-report')
   }
@@ -505,7 +539,7 @@ onActivated(() => {
     <header class="research-page-header">
       <div>
         <h1>Monte Carlo Robustness</h1>
-        <p>Stress the walk-forward selection process; compare a fixed selected candidate on the full dataset.</p>
+        <p>Stress the walk-forward selection process; compare the fixed selected candidate on its {{ fixedCandidateScopeLabel }}.</p>
       </div>
       <span class="research-status-badge">{{ reportLabel }}</span>
     </header>
@@ -531,7 +565,7 @@ onActivated(() => {
                     Walk-forward selection OOS · {{ displayedOutOfSampleTrades || 'not available' }} trades
                     <template v-if="displayedWalkForwardWindows"> / {{ displayedWalkForwardWindows }} windows</template>
                   </span>
-                  <span>Selected candidate, full dataset · {{ displayedFullDatasetTrades || 'not available' }} trades</span>
+                  <span>Selected candidate, {{ fixedCandidateScopeLabel }} · {{ displayedFullDatasetTrades || 'not available' }} trades</span>
                   <span class="evidence-quality" :class="`evidence-quality--${evidenceQuality.tone}`">
                     {{ evidenceQuality.label }}
                   </span>
@@ -676,6 +710,11 @@ onActivated(() => {
           </section>
         </div>
 
+        <div v-if="holdoutEvidence" class="research-inline-notice">
+          Untouched final holdout · {{ holdoutEvidence.trades }} trades · {{ holdoutEvidence.pnl >= 0 ? '+' : '' }}{{ money(holdoutEvidence.pnl) }} USDT · {{ holdoutEvidence.drawdown.toFixed(1) }}% max DD.
+          {{ holdoutEvidence.pnl <= 0 ? 'This period did not confirm the setup.' : holdoutEvidence.trades < 30 ? 'This is a limited sample.' : 'This period was not used to select the setup.' }}
+        </div>
+
         <section v-if="summary.sourceTrades && evidence.primary === 'walk_forward_oos'" class="research-card evidence-comparison-card">
           <h2 class="research-card-title">
             Evidence Comparison <small>Walk-forward OOS is the decision basis</small>
@@ -693,7 +732,7 @@ onActivated(() => {
               <span>{{ percent(summary.probabilityOfLoss) }}</span>
             </div>
             <div v-if="hasFullDatasetComparison" class="evidence-comparison-row">
-              <strong>Selected candidate, full dataset · Supplementary</strong>
+              <strong>Selected candidate, {{ fixedCandidateScopeLabel }} · Supplementary</strong>
               <span>{{ fullDatasetSummary.sourceTrades }}</span>
               <span>{{ money(fullDatasetSummary.netProfit.p50) }} USDT</span>
               <span>{{ money(fullDatasetSummary.netProfit.p05) }} USDT</span>
@@ -802,7 +841,7 @@ onActivated(() => {
                   ><strong>{{ summary.simulations ? summary.simulations.toLocaleString('en-US') : '—' }}</strong>
                 </div>
               </div>
-              <div v-if="summary.simulations" class="verdict">{{ drawdownVerdict }}</div>
+              <div v-if="summary.simulations" class="verdict" :class="{ 'verdict--warning': holdoutEvidence && (holdoutEvidence.pnl <= 0 || holdoutEvidence.trades < 30) }">{{ drawdownVerdict }}</div>
             </div>
           </section>
         </div>

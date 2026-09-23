@@ -16,7 +16,7 @@ describe('automatic strategy research', () => {
     const families = createAutoFamilyGrids(strategy, base)
     expect(families.map((family) => family.method))
       .toEqual(['RiskBased', 'FixedPercent', 'TrailingPercent', 'Combined'])
-    expect(families.every((family) => family.candidateCount > 1 && family.candidateCount <= 162)).toBe(true)
+    expect(families.every((family) => family.candidateCount > 1 && family.candidateCount <= 500)).toBe(true)
     for (const family of families) {
       expect(family.parameterGrid.base.params.sl_tp_method).toBe(family.method)
       expect(family.parameterGrid.base.params.risk_gearing).toBe(1)
@@ -25,12 +25,19 @@ describe('automatic strategy research', () => {
       expect(family.parameterGrid.axes.map((axis) => axis.parameter)).not.toContain('risk_gearing')
       expect(family.parameterGrid.axes.map((axis) => axis.parameter)).not.toContain('risk_percent')
       for (const axis of family.parameterGrid.axes) expect(axis.values.length).toBeGreaterThan(1)
+      expect(family.parameterGrid.axes.map((axis) => axis.parameter)).toContain('fashionably_late_mode')
     }
     expect(families[0]?.parameterGrid.axes.map((axis) => axis.parameter))
       .toContain(strategy === 'EMA / VWAP' ? 'ema_length' : 'sma_fast_period')
     expect(families[0]?.parameterGrid.axes.map((axis) => axis.parameter)).not.toContain('fixed_sl_percent')
     expect(families[3]?.parameterGrid.axes.map((axis) => axis.parameter))
-      .toEqual(expect.arrayContaining(['fixed_sl_percent', 'trailing_sl_percent', 'static_tp_percent']))
+      .not.toContain('trailing_sl_percent')
+    if (strategy === 'EMA / VWAP') {
+      const axes = families[0]!.parameterGrid.axes
+      expect(axes.find((axis) => axis.parameter === 'ema_source')?.values).toContain('HLC3')
+      expect(axes.find((axis) => axis.parameter === 'vwap_source')?.values).toContain('Low')
+      expect(axes.find((axis) => axis.parameter === 'fashionably_late_mode')?.values).toContain('OnHighLow')
+    }
   })
 
   it('does not recommend a high-return family that fails OOS evidence checks', () => {

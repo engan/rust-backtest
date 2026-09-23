@@ -3,12 +3,13 @@ import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import FieldTooltip from '@/components/FieldTooltip.vue'
 import { consumeResearchHandoff } from '@/services/researchHandoff'
-import { AUTO_STOP_METHODS, assessAutoFamily, autoMethodLabel, createAutoFamilyGrids, rankAutoFamilies, type AutoFamilyEvidence, type AutoStopMethod } from '@/services/autoResearch'
+import { AUTO_REFINEMENT, AUTO_STOP_METHODS, assessAutoFamily, autoMethodLabel, createAutoFamilyGrids, rankAutoFamilies, type AutoFamilyEvidence, type AutoStopMethod } from '@/services/autoResearch'
 import { createResearchAxes, includesCurrentValue, toggleResearchChoice, type ResearchAxis, type ValueResearchAxis } from '@/services/researchAxes'
 import { numericAxisCount, numericAxisValues } from '@/services/researchGrid'
 import { fetchBinanceKlines, fetchSymbolFilters } from '@/services/binanceAPI'
 import {
   createResearchJob,
+  createMonteCarloJob,
   downloadResearchReport,
   getResearchReport,
   researchServerHealth,
@@ -34,6 +35,12 @@ type CandidateRow = {
 }
 
 type OptimizationReport = {
+  final_selection?: {
+    seed_candidate_index?: number
+    selected_parameters?: { params?: Record<string, unknown> } & Record<string, unknown>
+    summary?: { net_profit?: number; max_drawdown_percent?: number; profit_factor?: number; total_trades?: number }
+    evaluated_candidates?: number
+  }
   optimization?: {
     evaluations?: Array<{
       candidate_index?: number
@@ -59,6 +66,8 @@ type OptimizationReport = {
       validation_start?: number
       validation_end_exclusive?: number
       selected_candidate_index?: number
+      refined_candidates_evaluated?: number
+      was_refined?: boolean
       selected_parameters?: { params?: Record<string, unknown> }
       training_summary?: { pnl_total?: number; total_trades?: number }
       validation_summary?: { pnl_total?: number; total_trades?: number; max_drawdown_percent?: number }
@@ -90,6 +99,7 @@ type ResearchEnvelope = {
       optimization?: { min_trades?: number; max_drawdown_percent?: number; min_profit_factor?: number }
       walk_forward_optimization?: { min_trades?: number }
       walk_forward?: { training_bars?: number; validation_bars?: number; step_bars?: number; anchored_training?: boolean }
+      refinement?: { top_seeds?: number; max_refined_candidates?: number }
     }
   }
   report?: OptimizationReport
@@ -103,6 +113,11 @@ const selectedRank = ref(1)
 const activeJob = ref<ResearchJobSnapshot | null>(null)
 const activeReport = ref<ResearchEnvelope | null>(null)
 const isRunning = ref(false)
+type AutoHoldout = { method: AutoStopMethod; trades: number; pnl: number; drawdown: number; profitFactor: number; jobId: string }
+type AutoMonte = { jobId: string; sourceTrades: number; p05: number; lossProbability: number; p95Drawdown: number }
+const autoHoldout = ref<AutoHoldout | null>(null)
+const autoMonte = ref<AutoMonte | null>(null)
+const autoWorkflowStage = ref('Ready')
 const baseSettingsSource = ref('Optimize defaults')
 const researchMode = ref<'automatic' | 'manual'>('automatic')
 type AutoFamilyRun = { method: AutoStopMethod; candidateCount: number; status: 'queued' | 'running' | 'completed' | 'failed'; evidence?: AutoFamilyEvidence; envelope?: ResearchEnvelope; error?: string }
@@ -182,6 +197,8 @@ const changeAxisChoice = (axis: ValueResearchAxis, choice: string, event: Event)
 }
 const candidates = ref<CandidateRow[]>([])
 const selectedCandidateRow = computed(() => candidates.value.find((candidate) => candidate.rank === selectedRank.value))
+const recommendedAutoSelection = computed(() => researchMode.value === 'automatic' && selectedRank.value === 0
+  ? activeReport.value?.report?.final_selection : null)
 const walkForwardClosedPnl = computed(() => {
   const windows = activeReport.value?.report?.walk_forward?.windows
   if (!windows?.length || windows.some((window) => !Array.isArray(window.validation_closed_trade_pnls))) return null
@@ -226,12 +243,18 @@ const estimatedSeconds = computed(() => Math.max(1, Math.ceil(candidateCount.val
 
 const candidatePoints = computed(() => {
   if (!candidates.value.length) return []
-  const maxDrawdown = Math.max(...candidates.value.map((candidate) => candidate.drawdown), 1)
-  const profits = candidates.value.map((candidate) => candidate.netProfit)
+  const final = researchMode.value === 'automatic' ? activeReport.value?.report?.final_selection : null
+  const refined = final?.summary && final.selected_parameters
+    ? [{ rank: 0, label: `Refined current setup: ${describeParameters(final.selected_parameters.params ?? {})}`,
+        netProfit: final.summary.net_profit ?? 0, drawdown: final.summary.max_drawdown_percent ?? 0, eligible: true }]
+    : []
+  const plotted = [...candidates.value, ...refined]
+  const maxDrawdown = Math.max(...plotted.map((candidate) => candidate.drawdown), 1)
+  const profits = plotted.map((candidate) => candidate.netProfit)
   const minProfit = Math.min(...profits)
   const maxProfit = Math.max(...profits)
   const profitRange = Math.max(maxProfit - minProfit, 1)
-  return candidates.value.map((candidate) => ({
+  return plotted.map((candidate) => ({
     ...candidate,
     x: 55 + (candidate.drawdown / maxDrawdown) * 480,
     y: 215 - ((candidate.netProfit - minProfit) / profitRange) * 190,
@@ -374,22 +397,32 @@ const applyReport = (value: unknown, label: string) => {
 
 const cacheSelectedCandidate = () => {
   const selected = candidates.value.find((candidate) => candidate.rank === selectedRank.value)
-  if (!selected || !activeReport.value) return
+  const refined = researchMode.value === 'automatic' && selectedRank.value === 0
+    ? activeReport.value?.report?.final_selection
+    : null
+  if ((!selected && !refined?.selected_parameters) || !activeReport.value) return
+  const parameters = refined?.selected_parameters ?? selected!.parameters
+  const description = refined?.selected_parameters
+    ? describeParameters(refined.selected_parameters.params ?? {})
+    : selected!.label
   sessionStorage.setItem(
     'selected-research-candidate',
     JSON.stringify({
       sourceResearchJobId: activeReport.value.job?.id,
-      candidate: selected.parameters,
-      description: selected.label,
+      candidate: parameters,
+      description,
       strategy: setup.strategy,
+      fixedCandidateScope: researchMode.value === 'automatic' ? 'research_period' : 'full_dataset',
       dataset: { symbol: setup.symbol, timeframe: setup.timeframe, endBeforeUtc: setup.endBefore || null },
       initialCapital: activeReport.value.reproducibility?.initialCapital ?? execution.initialCapital,
       evidencePreview: {
-        fullDatasetTrades: selected.fullDatasetTrades,
+        fullDatasetTrades: refined?.summary?.total_trades ?? selected?.fullDatasetTrades ?? 0,
         outOfSampleTrades: activeReport.value.report?.walk_forward?.total_validation_trades ?? 0,
         walkForwardWindows: activeReport.value.report?.walk_forward?.windows?.length ?? 0,
-        selectedWindows: selected.selectedWindows,
+        selectedWindows: selected?.selectedWindows ?? 0,
       },
+      holdoutEvidence: researchMode.value === 'automatic' && selectedAutoMethod.value === autoHoldout.value?.method
+        ? autoHoldout.value : null,
     }),
   )
 }
@@ -400,6 +433,7 @@ const cacheResearchReport = (value: unknown) => {
   const compactEnvelope: ResearchEnvelope = {
     ...envelope,
     report: {
+      final_selection: report.final_selection,
       optimization: {
         ...report.optimization,
         evaluations: report.optimization?.evaluations?.slice(0, 10),
@@ -416,6 +450,8 @@ const cacheResearchReport = (value: unknown) => {
               validation_start: window.validation_start,
               validation_end_exclusive: window.validation_end_exclusive,
               selected_candidate_index: window.selected_candidate_index,
+              refined_candidates_evaluated: window.refined_candidates_evaluated,
+              was_refined: window.was_refined,
               selected_parameters: window.selected_parameters,
               training_summary: window.training_summary,
               validation_summary: window.validation_summary,
@@ -441,8 +477,12 @@ const cacheResearchReport = (value: unknown) => {
 const cacheAutoComparison = () => {
   try {
     sessionStorage.setItem('auto-research-comparison', JSON.stringify({
-      schemaVersion: 'rust-backtest-auto-comparison-v1',
+      schemaVersion: 'rust-backtest-auto-comparison-v2',
       selectedMethod: selectedAutoMethod.value,
+      holdout: autoHoldout.value,
+      monteCarlo: autoMonte.value,
+      verdictLabel: reportLabel.value,
+      verdictMessage: reportMessage.value,
       families: autoFamilies.value.map((family) => ({
         ...family,
         envelope: family.envelope ? {
@@ -467,30 +507,43 @@ const showAutoFamily = (method: AutoStopMethod) => {
   if (!family?.envelope) return
   selectedAutoMethod.value = method
   applyReport(family.envelope, `${autoMethodLabel(method)} report`)
+  if (family.envelope.report?.final_selection?.selected_parameters) {
+    selectedRank.value = 0
+    cacheSelectedCandidate()
+  }
   cacheResearchReport(family.envelope)
   cacheAutoComparison()
 }
 
 const restoreAutoComparison = (value: unknown): boolean => {
-  const bundle = value as { schemaVersion?: string; selectedMethod?: AutoStopMethod; families?: AutoFamilyRun[] }
-  if (bundle?.schemaVersion !== 'rust-backtest-auto-comparison-v1' || !Array.isArray(bundle.families)) return false
+  const bundle = value as { schemaVersion?: string; selectedMethod?: AutoStopMethod; families?: AutoFamilyRun[]; holdout?: AutoHoldout; monteCarlo?: AutoMonte; verdictLabel?: string; verdictMessage?: string }
+  if (!['rust-backtest-auto-comparison-v1', 'rust-backtest-auto-comparison-v2'].includes(bundle?.schemaVersion ?? '') || !Array.isArray(bundle.families)) return false
   const restored = bundle.families.filter((family) => AUTO_STOP_METHODS.includes(family.method))
   const firstReport = restored.find((family) => family.envelope)?.envelope
   if (firstReport?.reproducibility?.parameterGrid?.base?.strategy === 'sma_crossover') setup.strategy = 'SMA Crossover'
   else if (firstReport) setup.strategy = 'EMA / VWAP'
   autoFamilies.value = restored
+  autoHoldout.value = bundle.holdout ?? null
+  autoMonte.value = bundle.monteCarlo ?? null
   researchMode.value = 'automatic'
   const chosen = autoFamilies.value.find((family) => family.method === bundle.selectedMethod && family.envelope)
     ?? rankedAutoFamilies.value.find((family) => family.envelope)
   if (chosen) showAutoFamily(chosen.method)
+  if (bundle.verdictLabel) reportLabel.value = bundle.verdictLabel
+  if (bundle.verdictMessage) reportMessage.value = bundle.verdictMessage
+  if (bundle.verdictLabel || bundle.verdictMessage) cacheAutoComparison()
   return true
 }
 
 const exportAutoComparison = () => {
   if (!autoFamilies.value.length) return
   downloadResearchReport({
-    schemaVersion: 'rust-backtest-auto-comparison-v1',
+    schemaVersion: 'rust-backtest-auto-comparison-v2',
     selectedMethod: selectedAutoMethod.value,
+    holdout: autoHoldout.value,
+    monteCarlo: autoMonte.value,
+    verdictLabel: reportLabel.value,
+    verdictMessage: reportMessage.value,
     families: autoFamilies.value,
   }, `auto-comparison-${setup.symbol}-${setup.timeframe}.json`)
 }
@@ -605,6 +658,9 @@ const runAutomaticResearch = async () => {
   }
   isRunning.value = true
   researchMode.value = 'automatic'
+  autoWorkflowStage.value = 'Loading market data'
+  autoHoldout.value = null
+  autoMonte.value = null
   selectedAutoMethod.value = null
   autoFamilies.value = grids.map(({ method, candidateCount }) => ({ method, candidateCount, status: 'queued' }))
   candidates.value = []
@@ -626,22 +682,26 @@ const runAutomaticResearch = async () => {
       fetchBinanceKlines(currentSetup.symbol, currentSetup.timeframe, currentSetup.dataset, endTime),
       fetchSymbolFilters(currentSetup.symbol),
     ])
-    if (klines.length < trainBars + validateBars) {
-      throw new Error(`The dataset has ${number(klines.length)} candles; at least ${number(trainBars + validateBars)} are needed for one complete walk-forward window.`)
+    const minimumBars = trainBars + 2 * validateBars + stepBars
+    if (klines.length < minimumBars) {
+      throw new Error(`The dataset has ${number(klines.length)} candles; at least ${number(minimumBars)} are needed for two walk-forward windows and a separate final holdout. Increase Dataset or shorten the windows.`)
     }
+    const researchKlines = klines.slice(0, -validateBars)
+    const holdoutKlines = klines.slice(-validateBars)
     const largestWarmup = Math.max(...grids.map((family) => {
       const params = family.parameterGrid.base.params
       const period = family.parameterGrid.axes.find((axis) => axis.parameter === (currentSetup.strategy === 'EMA / VWAP' ? 'ema_length' : 'sma_slow_period'))
       return Math.max(Number(params.atr_length) || 0, ...((period?.values ?? []).map(Number))) + 1
     }))
-    if (validateBars <= largestWarmup) {
-      throw new Error(`The validation window has ${number(validateBars)} candles; it must exceed the largest candidate warmup of ${number(largestWarmup)} candles. Increase Validate or use a shorter timeframe.`)
+    const refinedWarmup = largestWarmup + Math.max(...AUTO_REFINEMENT.length_offsets)
+    if (validateBars <= refinedWarmup) {
+      throw new Error(`Validation and holdout have ${number(validateBars)} candles; they must exceed the largest refined-candidate warmup of ${number(refinedWarmup)} candles.`)
     }
     if (trainBars <= largestWarmup) {
       throw new Error(`The training window has ${number(trainBars)} candles; it must exceed the largest candidate warmup of ${number(largestWarmup)} candles. Increase Train or use a shorter timeframe.`)
     }
     const commonRequest = {
-      klines,
+      klines: researchKlines,
       config: {
         commission_percent: currentExecution.commissionPercent,
         slippage_ticks: currentExecution.slippageTicks,
@@ -657,12 +717,14 @@ const runAutomaticResearch = async () => {
         optimization: { min_trades: currentValidation.minimumTrades, max_drawdown_percent: currentValidation.maximumDrawdown, min_profit_factor: currentValidation.minimumProfitFactor, score_metric: { composite: { drawdown_weight: 1, profit_factor_weight: 2 } } },
         walk_forward_optimization: { min_trades: currentValidation.trainingMinimumTrades, max_drawdown_percent: currentValidation.maximumDrawdown, min_profit_factor: null, score_metric: { composite: { drawdown_weight: 1, profit_factor_weight: 2 } } },
         walk_forward: { training_bars: trainBars, validation_bars: validateBars, step_bars: stepBars, anchored_training: currentValidation.method === 'Anchored walk-forward', max_windows: 100 },
+        refinement: AUTO_REFINEMENT,
         monte_carlo: null,
         monte_carlo_top_candidates: 1,
       },
       dataset: { symbol: currentSetup.symbol, timeframe: currentSetup.timeframe, endBeforeUtc: currentSetup.endBefore || null, requestedBars: currentSetup.dataset },
     }
     for (const [index, family] of grids.entries()) {
+      autoWorkflowStage.value = `Broad search and refinement · ${index + 1}/4`
       autoFamilies.value[index] = { method: family.method, candidateCount: family.candidateCount, status: 'running' }
       reportMessage.value = `Testing ${autoMethodLabel(family.method)} (${index + 1}/4)…`
       try {
@@ -670,6 +732,7 @@ const runAutomaticResearch = async () => {
         activeJob.value = job
         await waitForResearchJob(job.id, (progress) => {
           activeJob.value = progress
+          autoWorkflowStage.value = `${autoMethodLabel(family.method)} · ${progress.stage.replaceAll('_', ' ')}`
           reportMessage.value = `${autoMethodLabel(family.method)}: ${progress.message}`
         })
         const envelope = await getResearchReport<ResearchEnvelope>(job.id)
@@ -685,13 +748,91 @@ const runAutomaticResearch = async () => {
     }
     const first = recommendedAutoFamily.value ?? rankedAutoFamilies.value[0]
     if (first) showAutoFamily(first.method)
-    reportLabel.value = recommendedAutoFamily.value ? 'OOS candidate' : 'No robust candidate'
-    reportMessage.value = recommendedAutoFamily.value
-      ? `${autoMethodLabel(recommendedAutoFamily.value.method)} leads this provisional OOS comparison. Review the windows and run Monte Carlo; a separate final holdout is still needed.`
-      : 'No method passed the OOS evidence checks. Inspect failed families and consider more data or a different strategy.'
+    if (!recommendedAutoFamily.value) {
+      reportLabel.value = 'No robust candidate'
+      reportMessage.value = 'No method passed the walk-forward evidence checks. Inspect the methods; no final holdout or Monte Carlo recommendation was made.'
+      autoWorkflowStage.value = 'Needs review'
+    } else {
+      const leader = recommendedAutoFamily.value
+      const selected = leader.envelope?.report?.final_selection
+      const selectedParams = selected?.selected_parameters
+      const sourceJobId = leader.envelope?.job?.id
+      reportLabel.value = 'Checking holdout'
+      if (!selectedParams || !sourceJobId) throw new Error('The selected method has no refined final candidate or native source job.')
+      autoWorkflowStage.value = 'Checking untouched final period'
+      reportMessage.value = `Testing ${autoMethodLabel(leader.method)} on the reserved final ${currentValidation.validateDays}-day period…`
+      const holdoutJob = await createResearchJob({
+        ...commonRequest,
+        klines: holdoutKlines,
+        candidates: [selectedParams],
+        plan: {
+          optimization: { min_trades: 0, max_drawdown_percent: null, min_profit_factor: null, score_metric: { composite: { drawdown_weight: 1, profit_factor_weight: 2 } } },
+          walk_forward: null, refinement: null, monte_carlo: null, monte_carlo_top_candidates: 1,
+        },
+        dataset: { symbol: currentSetup.symbol, timeframe: currentSetup.timeframe, endBeforeUtc: currentSetup.endBefore || null, requestedBars: validateBars },
+      })
+      activeJob.value = holdoutJob
+      await waitForResearchJob(holdoutJob.id, (progress) => { activeJob.value = progress })
+      const holdoutReport = await getResearchReport<ResearchEnvelope>(holdoutJob.id)
+      const holdoutSummary = holdoutReport.report?.optimization?.evaluations?.[0]?.summary
+      if (!holdoutSummary) throw new Error('The final holdout report has no candidate summary.')
+      autoHoldout.value = {
+        method: leader.method, jobId: holdoutJob.id,
+        trades: holdoutSummary.total_trades ?? 0,
+        pnl: holdoutSummary.net_profit ?? 0,
+        drawdown: holdoutSummary.max_drawdown_percent ?? 0,
+        profitFactor: holdoutSummary.profit_factor ?? 0,
+      }
+      cacheSelectedCandidate()
+      cacheAutoComparison()
+      const closedOosTrades = leader.envelope?.report?.walk_forward?.windows
+        ?.reduce((total, window) => total + (window.validation_closed_trade_pnls?.length ?? 0), 0) ?? 0
+      if (closedOosTrades < 30 || (selected.summary?.total_trades ?? 0) < 30) {
+        reportLabel.value = 'Limited trade sample'
+        reportMessage.value = `Final holdout is complete with ${autoHoldout.value.trades} trades. Automatic Monte Carlo needs at least 30 closed walk-forward and research-period trades; this run has ${closedOosTrades} walk-forward trades.`
+      } else {
+        autoWorkflowStage.value = 'Stress-testing walk-forward trades'
+        reportMessage.value = 'Running Monte Carlo on the walk-forward selection and refined final candidate…'
+        const monteJob = await createMonteCarloJob({
+          closedTradePnls: [], initialCapital: currentExecution.initialCapital,
+          config: {
+            simulations: 100000, seed: 42, sampling: { mode: 'block_bootstrap', block_size: 5 },
+            skip_probability: 0.15, pnl_jitter_fraction: 0.2,
+            max_additional_cost_per_trade: 0.05, ruin_equity_percent_of_initial: 50,
+          },
+          dataset: { symbol: currentSetup.symbol, timeframe: currentSetup.timeframe, endBeforeUtc: currentSetup.endBefore || null },
+          candidate: selectedParams, sourceResearchJobId: sourceJobId,
+          fixedCandidateScope: 'research_period',
+          holdoutEvidence: autoHoldout.value,
+        })
+        activeJob.value = monteJob
+        await waitForResearchJob(monteJob.id, (progress) => {
+          activeJob.value = progress
+          reportMessage.value = progress.message
+        })
+        const monteReport = await getResearchReport<{ report?: { monte_carlo?: { source_trades?: number; probability_of_loss?: number; net_profit?: { p05?: number }; max_drawdown_percent?: { p95?: number } } } }>(monteJob.id)
+        const monte = monteReport.report?.monte_carlo
+        if (!monte) throw new Error('The Monte Carlo report has no simulation results.')
+        autoMonte.value = {
+          jobId: monteJob.id, sourceTrades: monte.source_trades ?? 0,
+          p05: monte.net_profit?.p05 ?? 0,
+          lossProbability: monte.probability_of_loss ?? 0,
+          p95Drawdown: monte.max_drawdown_percent?.p95 ?? 0,
+        }
+        sessionStorage.setItem('monte-carlo-report', JSON.stringify(monteReport))
+        cacheAutoComparison()
+        reportLabel.value = autoHoldout.value.pnl <= 0 ? 'Holdout needs review' : autoHoldout.value.trades < 30 ? 'Limited holdout' : 'Research run complete'
+        reportMessage.value = `Broad search, refinement, walk-forward, untouched holdout and Monte Carlo are complete. The final period had ${autoHoldout.value.trades} trades and ${autoHoldout.value.pnl >= 0 ? 'positive' : 'negative'} P&L${autoHoldout.value.trades < 30 ? '; its small sample cannot establish robustness' : ''}.`
+      }
+      autoWorkflowStage.value = 'Complete'
+    }
+    cacheAutoComparison()
   } catch (error) {
-    reportLabel.value = 'Failed'
-    reportMessage.value = error instanceof Error ? error.message : 'Automatic research failed.'
+    const partial = autoFamilies.value.some((family) => family.status === 'completed')
+    reportLabel.value = partial ? 'Follow-up incomplete' : 'Failed'
+    autoWorkflowStage.value = partial ? 'Needs review' : 'Failed'
+    reportMessage.value = `${partial ? 'The completed method reports remain available. ' : ''}${error instanceof Error ? error.message : 'Automatic research failed.'}`
+    cacheAutoComparison()
   } finally {
     isRunning.value = false
   }
@@ -845,6 +986,8 @@ onActivated(() => {
   if (!handoff) return
   researchMode.value = 'automatic'
   autoFamilies.value = []
+  autoHoldout.value = null
+  autoMonte.value = null
   selectedAutoMethod.value = null
   setup.strategy = handoff.strategy === 'smaCross' ? 'SMA Crossover' : 'EMA / VWAP'
   setup.symbol = handoff.market.symbol
@@ -865,11 +1008,12 @@ onActivated(() => {
   activeReport.value = null
   activeJob.value = null
   reportLabel.value = 'Not run'
-  reportMessage.value = 'Loaded the current Backtest setup. Automatic comparison is ready; switch to Manual search if you want to choose the ranges yourself.'
+  reportMessage.value = 'Loaded the current Backtest setup. Starting automatic research…'
   sessionStorage.removeItem('research-report')
   sessionStorage.removeItem('auto-research-comparison')
   sessionStorage.removeItem('selected-research-candidate')
   sessionStorage.removeItem('monte-carlo-report')
+  void runAutomaticResearch()
 })
 </script>
 
@@ -977,14 +1121,14 @@ onActivated(() => {
             </div>
             <div class="research-divider" />
             <div class="research-field">
-              <label for="minimum-trades">{{ researchMode === 'automatic' ? 'Min full/OOS trades' : 'Min full-period trades' }}</label>
+              <label for="minimum-trades">{{ researchMode === 'automatic' ? 'Min research/OOS trades' : 'Min full-period trades' }}</label>
               <input
                 id="minimum-trades"
                 v-model.number="validation.minimumTrades"
                 type="number"
                 min="0"
               />
-              <FieldTooltip label="Minimum trades" :text="researchMode === 'automatic' ? 'Minimum closed trades for full-period eligibility and for the automatic OOS family evidence check.' : 'Eligibility threshold for the full-dataset ranking. It does not reject out-of-sample results.'" />
+              <FieldTooltip label="Minimum trades" :text="researchMode === 'automatic' ? 'Minimum closed trades for research-period eligibility and for the automatic OOS family evidence check.' : 'Eligibility threshold for the full-dataset ranking. It does not reject out-of-sample results.'" />
             </div>
             <div class="research-field"><label for="minimum-train-trades">Min train trades</label><input id="minimum-train-trades" v-model.number="validation.trainingMinimumTrades" type="number" min="0" /><FieldTooltip label="Minimum training trades" text="Eligibility threshold when selecting one candidate within each walk-forward training window." /></div>
             <div class="research-field">
@@ -995,10 +1139,10 @@ onActivated(() => {
                 type="number"
                 min="0"
               />
-              <FieldTooltip label="Maximum drawdown" :text="researchMode === 'automatic' ? 'Full-period and training candidates must stay below this ceiling; the automatic family comparison also checks worst OOS window drawdown.' : 'Eligibility ceiling for full-dataset ranking and training-window selection. Out-of-sample drawdown is reported without filtering.'" />
+              <FieldTooltip label="Maximum drawdown" :text="researchMode === 'automatic' ? 'Research-period and training candidates must stay below this ceiling; the automatic family comparison also checks worst OOS window drawdown.' : 'Eligibility ceiling for full-dataset ranking and training-window selection. Out-of-sample drawdown is reported without filtering.'" />
             </div>
             <div class="research-field">
-              <label for="minimum-pf">Min full-period PF</label>
+              <label for="minimum-pf">{{ researchMode === 'automatic' ? 'Min research-period PF' : 'Min full-period PF' }}</label>
               <input
                 id="minimum-pf"
                 v-model.number="validation.minimumProfitFactor"
@@ -1006,7 +1150,7 @@ onActivated(() => {
                 min="0"
                 step="0.1"
               />
-              <FieldTooltip label="Minimum profit factor" text="Eligibility threshold for the full-dataset ranking only. Walk-forward validation results remain untouched." />
+              <FieldTooltip label="Minimum profit factor" :text="researchMode === 'automatic' ? 'Eligibility threshold for the research-period ranking only. Walk-forward validation results remain untouched.' : 'Eligibility threshold for the full-dataset ranking only. Walk-forward validation results remain untouched.'" />
             </div>
             <div class="research-inline-notice">Walk-forward windows stay untouched during each training selection. {{ researchMode === 'automatic' ? 'Automatic comparison also checks OOS trades and drawdown after the run, so its leading method remains provisional.' : 'Manual thresholds select candidates on full-period and training data only.' }}</div>
           </div>
@@ -1017,8 +1161,8 @@ onActivated(() => {
         <section v-if="researchMode === 'automatic'" class="research-card">
           <h2 class="research-card-title">Automatic strategy comparison <small>Four SL/TP methods</small></h2>
           <div class="research-card-body">
-            <p class="research-axis-intro">One run compares Risk-based, Fixed %, Trailing % and Combined on the same candles and walk-forward windows. The search varies strategy signals and method-specific exits; gearing, costs, safeguards and the active ADX filter stay fixed.</p>
-            <p class="research-axis-intro">{{ number(autoCandidateTotal) }} bounded candidates in total · current settings from {{ baseSettingsSource }}.</p>
+            <p class="research-axis-intro">One run compares four SL/TP methods. Within each training window it explores the strategy's signal and entry choices, then refines the best diverse setups and method-specific exits. The latest period is reserved for a final check; Monte Carlo follows automatically when there are enough trades.</p>
+            <p class="research-axis-intro">{{ number(autoCandidateTotal) }} broad candidates in total, plus bounded training-only refinements · starting settings from {{ baseSettingsSource }}. Costs, gearing and safeguards stay fixed.</p>
             <div class="research-button-row">
               <button class="research-primary" type="button" :disabled="isRunning || autoCandidateTotal < 1" @click="runAutomaticResearch">
                 {{ isRunning ? 'Running automatic comparison…' : '▶ Find robust setups' }}
@@ -1030,8 +1174,9 @@ onActivated(() => {
                 <span>{{ family.candidateCount }} candidates · {{ family.status }}</span>
               </div>
             </div>
+            <p v-if="isRunning" class="research-axis-intro">Current stage: {{ autoWorkflowStage }}</p>
             <div v-if="reportMessage" class="research-inline-notice">{{ reportMessage }}</div>
-            <p class="research-axis-intro auto-evidence-note">A method leads only if it has enough OOS trades, positive compounded OOS P&amp;L, at least half of its windows profitable and OOS drawdown within your limit. This is a provisional comparison; choosing among OOS results still needs a separate final holdout.</p>
+            <p class="research-axis-intro auto-evidence-note">Methods are ranked on walk-forward evidence. The final holdout is checked once after a method is chosen and never feeds back into the search. Monte Carlo stresses the observed trades; it does not certify future returns.</p>
           </div>
         </section>
 
@@ -1171,9 +1316,16 @@ onActivated(() => {
           </div>
           <div v-else class="research-card-body research-axis-intro">Run automatic comparison to see walk-forward evidence for all four methods.</div>
           <div v-if="rankedAutoFamilies.length" class="research-card-body">
-            <div v-if="recommendedAutoFamily" class="research-inline-notice">Provisional leader: {{ autoMethodLabel(recommendedAutoFamily.method) }}. It passed the OOS evidence checks. Select a row to inspect its full-period candidates and validation windows.</div>
+            <div v-if="recommendedAutoFamily" class="research-inline-notice">Provisional leader: {{ autoMethodLabel(recommendedAutoFamily.method) }}. It passed the OOS evidence checks. Select a row to inspect its research-period candidates and validation windows.</div>
             <div v-else class="research-inline-notice">No method passed every OOS evidence check. The rows are still available for inspection; none is recommended.</div>
             <p v-if="selectedAutoMethod" class="research-axis-intro">{{ autoFamilies.find((family) => family.method === selectedAutoMethod)?.evidence?.reason }}</p>
+            <div v-if="autoHoldout" class="research-inline-notice">
+              Untouched final period · {{ autoMethodLabel(autoHoldout.method) }}: {{ autoHoldout.trades }} trades, {{ autoHoldout.pnl >= 0 ? '+' : '' }}{{ number(autoHoldout.pnl) }} USDT, {{ number(autoHoldout.drawdown, 1) }}% max DD. This result did not choose the method.
+            </div>
+            <div v-if="autoMonte" class="research-inline-notice">
+              Automatic Monte Carlo · {{ autoMonte.sourceTrades }} walk-forward trades: 5th percentile {{ autoMonte.p05 >= 0 ? '+' : '' }}{{ number(autoMonte.p05) }} USDT, simulated loss share {{ number(autoMonte.lossProbability * 100, 1) }}%, 95th-percentile drawdown {{ number(autoMonte.p95Drawdown, 1) }}%.
+              <button class="research-secondary" type="button" @click="openMonteCarlo">View Monte Carlo</button>
+            </div>
             <button class="research-secondary" type="button" @click="exportAutoComparison">Export comparison</button>
           </div>
           <div v-if="autoFamilies.some((family) => family.status === 'failed')" class="research-card-body">
@@ -1184,7 +1336,7 @@ onActivated(() => {
         <section class="research-card">
           <h2 class="research-card-title">
             Best Candidates
-            <small>Full-period ranking {{ selectedAutoMethod && researchMode === 'automatic' ? `within ${autoMethodLabel(selectedAutoMethod)}` : '' }} · {{ reportLabel }}</small>
+            <small>{{ researchMode === 'automatic' ? 'Research-period' : 'Full-period' }} ranking {{ selectedAutoMethod && researchMode === 'automatic' ? `within ${autoMethodLabel(selectedAutoMethod)}` : '' }} · {{ reportLabel }}</small>
           </h2>
           <div class="results-table-wrap">
             <table class="results-table">
@@ -1226,6 +1378,12 @@ onActivated(() => {
             </table>
           </div>
           <div v-if="activeReport?.report?.walk_forward" class="research-card-body">
+            <div v-if="researchMode === 'automatic' && recommendedAutoSelection?.selected_parameters && candidates.every((candidate) => !candidate.eligible)" class="research-inline-notice">
+              None of the broad starting points passed the research-period filters. Refinement found the current setup shown below; the numbered rows remain visible as starting-point evidence.
+            </div>
+            <div v-if="recommendedAutoSelection?.selected_parameters" class="research-inline-notice">
+              <strong>Current setup selected after refinement:</strong> {{ describeParameters(recommendedAutoSelection.selected_parameters.params ?? {}) }}. It was chosen on the research period; the separate final-period result above checks it on later data. Click a numbered row to inspect another research-period candidate.
+            </div>
             <div class="research-summary-line">
               <span>Walk-forward selection · compounded OOS equity P&amp;L</span>
               <strong>{{ number(activeReport.report.walk_forward.compounded_out_of_sample_net_profit ?? 0) }} USDT · {{ activeReport.report.walk_forward.total_validation_trades ?? 0 }} trades / {{ activeReport.report.walk_forward.windows?.length ?? 0 }} windows</strong>
@@ -1235,9 +1393,9 @@ onActivated(() => {
               <strong>{{ number(walkForwardClosedPnl) }} USDT</strong>
             </div>
             <div v-if="selectedCandidateRow" class="research-inline-notice">
-              Candidate #{{ selectedCandidateRow.rank }} was selected in {{ selectedCandidateRow.selectedWindows }} training windows; their subsequent OOS windows had {{ number(selectedCandidateRow.selectedOosPnl) }} USDT in summed equity P&amp;L and {{ selectedCandidateRow.selectedClosedOosPnl == null ? '—' : number(selectedCandidateRow.selectedClosedOosPnl) }} USDT from closed trades across {{ selectedCandidateRow.selectedOosTrades }} trades. The headline compounds window equity returns. Monte Carlo samples closed-trade P&amp;L only, so its source differs when a window ends with an open position.
+              Candidate #{{ selectedCandidateRow.rank }} seeded {{ selectedCandidateRow.selectedWindows }} training windows; their refined setups had {{ number(selectedCandidateRow.selectedOosPnl) }} USDT in summed OOS equity P&amp;L and {{ selectedCandidateRow.selectedClosedOosPnl == null ? '—' : number(selectedCandidateRow.selectedClosedOosPnl) }} USDT from closed trades across {{ selectedCandidateRow.selectedOosTrades }} trades. The headline compounds window equity returns. Monte Carlo samples closed-trade P&amp;L only, so its source differs when a window ends with an open position.
               <span v-if="singleCandidateSearch">Only one candidate was tested, so its settings stayed fixed across all windows. These windows are not independent evidence if the candidate was originally chosen by looking at the same history.</span>
-              <span v-else>This is not an OOS test of the same fixed candidate in every window.</span>
+              <span v-else>This is not an OOS test of the same fixed candidate in every window; automatic refinement can change a seed's settings inside each training period.</span>
             </div>
             <details v-if="activeReport.report.walk_forward.windows?.length" class="walk-forward-details">
               <summary>Inspect {{ activeReport.report.walk_forward.windows.length }} walk-forward windows</summary>
@@ -1259,7 +1417,7 @@ onActivated(() => {
                   </tbody>
                 </table>
               </div>
-              <p class="walk-forward-note">Bar ranges are zero-based; end indices are exclusive. Each OOS window starts flat and follows its own untouched training window.</p>
+              <p class="walk-forward-note">Bar ranges are zero-based; end indices are exclusive. Each OOS window starts flat and follows its own untouched broad search and refinement on training data.</p>
             </details>
           </div>
           <div class="research-card-body research-button-row">
@@ -1277,13 +1435,13 @@ onActivated(() => {
               Export report
             </button>
             <button class="research-primary" type="button" :disabled="!candidates.length" @click="openMonteCarlo">
-              Run Monte Carlo
+              {{ autoMonte && selectedRank === 0 && selectedAutoMethod === autoHoldout?.method ? 'View Monte Carlo' : 'Run Monte Carlo' }}
             </button>
           </div>
         </section>
 
         <section class="research-card">
-          <h2 class="research-card-title">Return vs Drawdown <small>Top 10 full-period candidates</small></h2>
+          <h2 class="research-card-title">Return vs Drawdown <small>{{ researchMode === 'automatic' ? 'Top 10 broad candidates + refined setup' : 'Top 10 full-period candidates' }}</small></h2>
           <div class="chart-frame">
             <svg viewBox="0 0 560 255" role="img" aria-label="Return versus drawdown scatter plot">
               <g>
@@ -1313,7 +1471,7 @@ onActivated(() => {
                   :cx="point.x"
                   :cy="point.y"
                   :r="selectedRank === point.rank ? 7 : 4.5"
-                  :fill="selectedRank === point.rank ? '#2699ff' : point.eligible ? '#46dd89' : '#72869b'"
+                  :fill="selectedRank === point.rank ? '#2699ff' : point.rank === 0 ? '#a9b7ff' : point.eligible ? '#46dd89' : '#72869b'"
                   :stroke="selectedRank === point.rank ? '#d8eeff' : 'none'"
                   stroke-width="2"
                 >
@@ -1335,7 +1493,7 @@ onActivated(() => {
               </text>
             </svg>
           </div>
-          <p class="scatter-caption">Up means higher full-period return; left means lower drawdown. Blue marks the selected candidate, not a proven out-of-sample winner.</p>
+          <p class="scatter-caption">Up means higher return in the ranking period; left means lower drawdown. Blue marks the selected setup; violet marks the refined setup when another row is selected. Neither point proves out-of-sample performance.</p>
         </section>
       </div>
     </div>

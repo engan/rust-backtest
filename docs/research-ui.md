@@ -7,15 +7,21 @@ now run real jobs through the native Rust research server.
 
 1. Run a **Backtest**, then use **Open in Optimize** to carry the fields currently
    visible in the Backtest form, including its strategy, requested candle count,
-   safeguards, and execution assumptions, into a research job. If the form was
-   edited after the last Backtest, run it again before comparing its displayed
-   result with Optimize. Walk-forward settings belong to Optimize and are chosen
-   separately. The default **Automatic comparison** runs four bounded searches
-   on the same fetched candles, costs, safeguards, and walk-forward windows: one
-   each for Risk-based, Fixed %, Trailing %, and Combined SL/TP. It varies the
-   main signal parameters and only the exits relevant to each method. ADX,
-   gearing, order size, and risk settings remain at their Backtest values in
-   this first pass. It does not assume the Backtest method is the winner.
+   safeguards, and execution assumptions, into Optimize. This handoff starts
+   **Automatic comparison** immediately; opening Optimize directly lets you
+   adjust the inputs before pressing **Find robust setups**. If the Backtest
+   form was edited after its last run, rerun it before comparing its displayed
+   result with Optimize. Walk-forward settings belong to Optimize. The automatic
+   run compares Risk-based, Fixed %, Trailing %, and Combined SL/TP on the same
+   downloaded candles and execution assumptions. It reserves the newest
+   validation-length period as a final holdout. On the earlier research period,
+   each walk-forward training window first tests a bounded grid of relevant
+   signal, VWAP, and entry choices. Rust then refines the strongest *diverse*
+   seeds around their exit values and nearby periods on those same training
+   candles. Only the selected refined setup runs on the following validation
+   window. ADX, gearing, order size, and safeguards remain at their Backtest
+   values; enabled ADX and ATR entry thresholds receive a small local refinement.
+   This process does not assume the Backtest SL/TP method is the winner.
    **Manual search** remains available for choosing exact ranges and varying
    other applicable settings. Expand **Base strategy settings** there to inspect
    every carried strategy parameter.
@@ -27,27 +33,34 @@ now run real jobs through the native Rust research server.
    the table initially shows only enabled search axes. **Show additional
    parameters** reveals the other applicable axes if you want to vary them;
    hidden settings retain their Backtest values in every candidate.
-2. Run the automatic comparison or a manual search. The automatic table ranks
+2. Let the automatic comparison finish, or run a manual search. The automatic table ranks
    methods by compounded out-of-sample (OOS) equity P&L divided by the larger
    of their worst OOS drawdown or 5%. A method receives **Pass** only with the
    configured minimum OOS trades, positive OOS P&L, drawdown within the
    configured limit, at least two validation windows, and at least half of
    those windows profitable. Select a method to inspect its detailed report.
-   **Best Candidates** ranks the top ten *within that method* by full-dataset
-   results; it is not the OOS method ranking. The walk-forward summary
-   separately shows how often the rolling
-   training procedure selected each candidate and how those selections
-   performed in their subsequent out-of-sample windows. A selected candidate's
+   **Best Candidates** ranks the top ten broad-search candidates *within that
+   method* on the research period; it is not the OOS method ranking. Rust also
+   refines a final candidate on that research period. The walk-forward summary
+   separately shows which broad seeds led to refined selections and how those
+   selections performed in subsequent out-of-sample windows. A numbered row's
    OOS subset is not a fixed-candidate OOS test over every window. The headline
    compounds window returns; the candidate detail sums window P&L, so their
    amounts can differ. OOS equity P&L can include an open position at a window
    boundary; Monte Carlo resamples only closed-trade P&L. The window table shows
    both amounts.
-3. Choose a candidate for Monte Carlo. The primary simulation samples the
-   combined out-of-sample trades from the adaptive walk-forward selection
-   process. A supplementary simulation samples that one candidate's trades on
-   the full dataset. These are different sources of evidence and are labeled
-   separately in the UI.
+3. If a method passes those OOS checks, the runner applies its final refined
+   setup once to the reserved holdout, without using that result to choose a
+   method. When both trade samples contain at least 30 closed trades, it also
+   runs Monte Carlo automatically. The primary simulation samples the combined
+   OOS trades from the adaptive walk-forward selection process. A supplementary
+   simulation samples the selected fixed candidate's research-period trades.
+   These are different sources of evidence and are labeled separately. The
+   holdout trade count is shown explicitly; fewer than 30 trades are limited
+   evidence even if its P&L is positive. The Monte Carlo report retains that
+   result, and its verdict flags a negative or small final sample so a
+   favorable simulation cannot override the untouched check. You can inspect
+   other candidates and rerun Monte Carlo manually.
    Monte Carlo stresses the observed trade outcomes and their order. It cannot
    establish that a parameter set was not selected by overfitting the same
    historical data; keep a genuinely untouched later period for that check.
@@ -57,15 +70,17 @@ now run real jobs through the native Rust research server.
    storage during the same session.
 
 The automatic leader is provisional: the four methods were compared on the
-same OOS history, so choosing among them uses that history for selection. Keep
-a genuinely untouched later period for the final check, and do not interpret
-Monte Carlo as a test that removes this selection bias.
+same OOS history, so choosing among them uses that history for selection. The
+reserved final period is checked once and is not fed back into the search.
+Monte Carlo does not remove selection bias or prove future profitability.
 
 Monte Carlo requires at least 30 closed trades in both evidence sets. A shorter
 walk-forward sample is shown in the UI but cannot be simulated, because its
 percentiles and tail-risk estimates would be too unstable for a useful
-robustness decision. The report keeps the OOS and full-dataset summaries
+robustness decision. The report keeps the OOS and fixed-candidate summaries
 separate and records their trade counts and walk-forward window count.
+Automatic runs use the research period for the fixed candidate; manual runs
+may use the full dataset.
 The endpoint-range panel uses the simulated final equity percentiles. Its
 connecting curves are illustrations, not measured intermediate path
 percentiles; the histograms contain the actual simulated distributions.

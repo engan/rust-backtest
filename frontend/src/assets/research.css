@@ -711,6 +711,12 @@
   text-align: center;
 }
 
+.verdict--warning {
+  border-color: #bc8845;
+  background: rgba(188, 136, 69, 0.13);
+  color: #ffd7a0;
+}
+
 @media (max-width: 1320px) {
   .optimize-layout {
     grid-template-columns: minmax(250px, 0.7fr) minmax(520px, 1.5fr);
