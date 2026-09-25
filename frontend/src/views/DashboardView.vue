@@ -855,7 +855,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, nextTick } from 'vue'
+import { ref, computed, reactive, nextTick, onActivated } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useBacktest } from '@/composables/useBacktest'
 import { fetchSymbolFilters } from '@/services/binanceAPI'
@@ -863,7 +863,7 @@ import PnlChart from '@/components/PnlChart.vue'
 import FieldTooltip from '@/components/FieldTooltip.vue'
 import { loadPreset, savePreset, parsePreset, type TvPreset } from '@/services/tvPreset.ts'
 import { clearBacktestAnalysis, saveBacktestAnalysis, type BacktestAnalysisSnapshot } from '@/services/backtestReport'
-import { saveResearchHandoff } from '@/services/researchHandoff'
+import { consumeBacktestHandoff, saveResearchHandoff } from '@/services/researchHandoff'
 import { tradeCommission } from '@/services/tradeMetrics'
 
 // Importer ENUMs (verdier)
@@ -1272,6 +1272,26 @@ const captureCurrentBacktestSettings = (): Omit<BacktestAnalysisSnapshot, 'resul
     marginEnforcementEnabled: marginEnforcementEnabled.value,
     priceToTick: priceToTick.value,
   },
+})
+
+onActivated(() => {
+  const handoff = consumeBacktestHandoff()
+  if (!handoff) return
+  selectedStrategy.value = handoff.strategy === 'smaCross' ? 'smaCross' : 'emaVwap'
+  Object.assign(activeParams.value, handoff.parameters)
+  symbol.value = handoff.market.symbol
+  timeframe.value = handoff.market.timeframe as typeof timeframe.value
+  dataLimitForFetch.value = handoff.market.dataLimit
+  endBeforeUtc.value = handoff.market.endBeforeUtc ?? ''
+  initialCapital.value = handoff.execution.initialCapital
+  commissionPercent.value = handoff.execution.commissionPercent
+  slippageTicks.value = handoff.execution.slippageTicks
+  priceToTick.value = handoff.execution.priceToTick ?? false
+  marginEnforcementEnabled.value = handoff.execution.marginEnforcementEnabled ?? false
+  marginLongPercent.value = handoff.execution.marginLongPercent ?? 100
+  marginShortPercent.value = handoff.execution.marginShortPercent ?? 100
+  presetEnabled.value = false
+  void runBacktest()
 })
 
 const runBacktest = async () => {

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "run-p dev:vite dev:research",
     "dev:vite": "vite",
-    "dev:research": "cargo run --manifest-path ../../rust-backtest-proprietary/Cargo.toml --bin research_server",
+    "dev:research": "cargo run --profile research --manifest-path ../../rust-backtest-proprietary/Cargo.toml --bin research_server",
     "build": "run-p type-check \"build-only {@}\" --",
     "preview": "vite preview",
     "test:unit": "vitest",

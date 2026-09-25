@@ -4,7 +4,7 @@ import { KeepAlive, defineComponent, h, ref } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import DashboardView from './DashboardView.vue'
 import OptimizeView from './OptimizeView.vue'
-import { consumeResearchHandoff, saveResearchHandoff } from '@/services/researchHandoff'
+import { consumeResearchHandoff, saveResearchHandoff, saveBacktestHandoff } from '@/services/researchHandoff'
 
 const mocks = vi.hoisted(() => ({
   runBacktest: vi.fn(),
@@ -91,6 +91,31 @@ describe('Open in Optimize', () => {
       marginEnforcementEnabled: true, marginLongPercent: 50,
       marginShortPercent: 25, priceToTick: false,
     })
+    wrapper.unmount()
+  })
+
+  it('loads and runs a selected native candidate with the exact frozen market and costs', async () => {
+    saveBacktestHandoff({
+      strategy: 'emaVwap',
+      parameters: { ema_length: 126, ema_source: 'HLC3', vwap_anchor_period: 'Week', vwap_source: 'Low',
+        trailing_sl_perc: 2.8, fixed_tp_for_trailing_perc: 6.9, max_drawdown_perc: 12,
+        atr_threshold_fl: 1.5, parity_mode: true, behavior_mode: 'Improved' },
+      market: { symbol: 'SOLUSDT', timeframe: '1h', dataLimit: 4320, endBeforeUtc: '2026-09-25T10:00' },
+      execution: { initialCapital: 12000, commissionPercent: 0.08, slippageTicks: 3, quoteCurrency: 'USDT',
+        marginEnforcementEnabled: true, marginLongPercent: 50, marginShortPercent: 25, priceToTick: true },
+    })
+    const host = defineComponent({ setup: () => () => h(KeepAlive, null, { default: () => h(DashboardView) }) })
+    const wrapper = mount(host, { global: { stubs: { RouterLink: true, PnlChart: true, FieldTooltip: true } } })
+    await flushPromises()
+    expect(mocks.runBacktest).toHaveBeenCalledOnce()
+    expect(mocks.runBacktest.mock.calls[0]?.[0]).toMatchObject({
+      params: { ema_length: 126, ema_source: 'HLC3', trailing_sl_perc: 2.8, fixed_tp_for_trailing_perc: 6.9, max_drawdown_perc: 12 },
+    })
+    expect((wrapper.get('#limit').element as HTMLInputElement).value).toBe('4320')
+    expect((wrapper.get('#end-before').element as HTMLInputElement).value).toBe('2026-09-25T10:00')
+    expect((wrapper.get('#commission').element as HTMLInputElement).value).toBe('0.08')
+    expect((wrapper.get('#margin-short').element as HTMLInputElement).value).toBe('25')
+    expect(sessionStorage.getItem('research-to-backtest')).toBeNull()
     wrapper.unmount()
   })
 

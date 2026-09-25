@@ -83,6 +83,10 @@ rust-backtest/
 
 The browser routes are `/`, `/optimize`, `/monte-carlo`, and `/performance`. The full trade list opens from the Backtest page. Directly opening a browser route on a static host requires an SPA fallback to `index.html`.
 
+## Automatic research
+
+See [the automatic research guide](docs/automatic-research.md) for the broad search, iterative refinement, rolling calibration, incumbent comparison, holdout and one-click Backtest verification flow.
+
 ## Deployment status
 
 This repository is not yet configured as a complete Vercel deployment. The Vite proxies only work during local development, and `functions/binance-proxy/[[path]].ts` is a Cloudflare Pages function, not a Vercel function. The local research service is also not a public API. The proposed steps for a first public version on `trade.neoweb.no` are in the [inactive publication plan](docs/plans/trade-neoweb-publication-plan-2026-09-22.md). That plan has not been executed.

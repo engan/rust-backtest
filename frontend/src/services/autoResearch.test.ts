@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assessAutoFamily, createAutoFamilyGrids, rankAutoFamilies } from './autoResearch'
+import { AUTO_REFINEMENT, closedCandleCutoff, assessAutoFamily, createAutoFamilyGrids, rankAutoFamilies } from './autoResearch'
 
 const base = {
   ema_length: 122, ema_source: 'High', vwap_anchor_period: 'Week', vwap_source: 'Open',
@@ -16,7 +16,7 @@ describe('automatic strategy research', () => {
     const families = createAutoFamilyGrids(strategy, base)
     expect(families.map((family) => family.method))
       .toEqual(['RiskBased', 'FixedPercent', 'TrailingPercent', 'Combined'])
-    expect(families.every((family) => family.candidateCount > 1 && family.candidateCount <= 500)).toBe(true)
+    expect(families.every((family) => family.candidateCount > 1 && family.candidateCount <= 3000)).toBe(true)
     for (const family of families) {
       expect(family.parameterGrid.base.params.sl_tp_method).toBe(family.method)
       expect(family.parameterGrid.base.params.risk_gearing).toBe(1)
@@ -40,6 +40,15 @@ describe('automatic strategy research', () => {
     }
   })
 
+  it('covers independent broad ranges and exits even from a narrow starting setup', () => {
+    const families = createAutoFamilyGrids('EMA / VWAP', { ...base, ema_length: 126, trailing_sl_perc: 2.8, fixed_tp_for_trailing_perc: 6.9 })
+    expect(families[2]!.parameterGrid.base.params.trailing_sl_perc).toBe(3)
+    expect(families[2]!.parameterGrid.base.params.fixed_tp_for_trailing_perc).toBe(6)
+    expect(families[2]!.parameterGrid.axes.find(a => a.parameter === 'ema_length')!.values).toEqual([40, 80, 120, 126, 180, 240])
+    expect(families[2]!.parameterGrid.axes.find(a => a.parameter === 'ema_source')!.values).toEqual(expect.arrayContaining(['Open', 'Close', 'HLC3']))
+    expect(AUTO_REFINEMENT.rounds).toBe(5)
+  })
+
   it('does not recommend a high-return family that fails OOS evidence checks', () => {
     const weak = assessAutoFamily('Combined', 162, {
       compounded_out_of_sample_net_profit: 4000, total_validation_trades: 10,
@@ -52,5 +61,14 @@ describe('automatic strategy research', () => {
     expect(weak.eligible).toBe(false)
     expect(stable.eligible).toBe(true)
     expect(rankAutoFamilies([weak, stable])[0]?.method).toBe('TrailingPercent')
+  })
+})
+
+describe('closed-candle research snapshots', () => {
+  it('pins hourly, weekly and calendar-month runs to completed candles', () => {
+    const now = Date.parse('2026-09-25T13:27:18Z')
+    expect(new Date(closedCandleCutoff(now, '1h')).toISOString()).toBe('2026-09-25T13:00:00.000Z')
+    expect(new Date(closedCandleCutoff(now, '1w')).toISOString()).toBe('2026-09-21T00:00:00.000Z')
+    expect(new Date(closedCandleCutoff(now, '1M')).toISOString()).toBe('2026-09-01T00:00:00.000Z')
   })
 })

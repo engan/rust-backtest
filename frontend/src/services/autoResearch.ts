@@ -22,27 +22,24 @@ export type AutoFamilyGrid = {
 
 export const AUTO_REFINEMENT = {
   top_seeds: 6,
-  exit_factors: [0.75, 1, 1.3],
+  exit_factors: [0.5, 1, 2],
   length_offsets: [-4, 0, 4],
-  max_refined_candidates: 768,
+  max_refined_candidates: 2048,
+  rounds: 5,
+  broad_exits: true,
 } as const
 
 const unique = <T>(values: T[]): T[] => [...new Set(values)]
-const rounded = (value: number, whole: boolean): number => whole ? Math.round(value) : Number(value.toFixed(4))
-
-const around = (axis: ResearchAxis): number[] => {
-  if (axis.type !== 'numeric') return []
-  const floor = axis.wholeNumbers ? 1 : 0.01
-  return unique([0.8, 1, 1.2].map((factor) => Math.max(floor, rounded(axis.baseValue * factor, axis.wholeNumbers))))
-}
-
 /** Broad structural search. Exit values are refined *inside each training window*
  * by the native runner, so no validation bars choose search ranges or seeds. */
 export const createAutoFamilyGrids = (
   strategy: string,
   base: Record<string, unknown>,
 ): AutoFamilyGrid[] => AUTO_STOP_METHODS.map((method) => {
-  const params = { ...base, sl_tp_method: method }
+  const params = { ...base, sl_tp_method: method,
+    fixed_sl_perc: 2, fixed_tp_perc: 6, trailing_sl_perc: 3,
+    fixed_tp_for_trailing_perc: 6, atr_mult_rb: 1.5, reward_mult_rb: 2,
+  }
   const relevant = createResearchAxes(strategy, params)
   const chosen = strategy === 'EMA / VWAP'
     ? ['ema_length', 'ema_source', 'vwap_anchor_period', 'vwap_source', 'fashionably_late_mode']
@@ -52,18 +49,9 @@ export const createAutoFamilyGrids = (
     if (!axis) throw new Error(`Automatic search cannot find ${id} for ${method}.`)
     let values: Array<number | string>
     if (axis.type === 'numeric') {
-      values = around(axis)
-      if (id === 'sma_slow_period') values = unique([axis.baseValue, values[2] ?? axis.baseValue])
+      values = unique([axis.baseValue, ...(id === 'sma_fast_period' ? [5, 10, 20, 40] : [40, 80, 120, 180, 240])]).sort((a, b) => a - b)
     } else {
-      values = id === 'ema_source'
-        ? unique([axis.baseValue, 'High', 'Low', 'HLC3'])
-        : id === 'vwap_source'
-          ? unique([axis.baseValue, 'Low', 'HLC3'])
-          : id === 'vwap_anchor_period'
-            ? unique([axis.baseValue, 'Week', 'Day'])
-            : id === 'fashionably_late_mode'
-              ? unique([axis.baseValue, 'Off', 'OnClose', 'OnHighLow', 'Atr'])
-              : [axis.baseValue]
+      values = unique([axis.baseValue, ...axis.options])
       values = values.filter((value) => axis.options.includes(String(value)))
     }
     if (!values.length || values.some((value) => typeof value === 'number' && (!Number.isFinite(value) || value <= 0))) {
@@ -136,3 +124,19 @@ export const rankAutoFamilies = <T extends AutoFamilyEvidence>(families: T[]): T
       || right.oosTrades - left.oosTrades
       || AUTO_STOP_METHODS.indexOf(left.method) - AUTO_STOP_METHODS.indexOf(right.method),
   )
+
+/** Exclusive start of the current candle. Automatic runs use closed candles only. */
+export const closedCandleCutoff = (timestamp: number, timeframe: string): number => {
+  const match = /^(\d+)(s|m|h|d|w|M)$/.exec(timeframe)
+  if (!match || !Number.isFinite(timestamp)) throw new Error('Invalid candle timeframe or cutoff.')
+  const size = Number(match[1])
+  if (!Number.isSafeInteger(size) || size < 1) throw new Error('Invalid candle timeframe size.')
+  if (match[2] === 'M') {
+    const date = new Date(timestamp)
+    const month = Math.floor((date.getUTCFullYear() * 12 + date.getUTCMonth()) / size) * size
+    return Date.UTC(Math.floor(month / 12), month % 12, 1)
+  }
+  const duration = size * ({ s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 }[match[2]] ?? 0)
+  const anchor = match[2] === 'w' ? Date.UTC(1970, 0, 5) : 0 // Binance weeks start Monday UTC.
+  return anchor + Math.floor((timestamp - anchor) / duration) * duration
+}
