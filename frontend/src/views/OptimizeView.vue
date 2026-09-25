@@ -1428,7 +1428,7 @@ onActivated(() => {
               Next-period calibration: {{ dateLabel(nextPeriod.report.calibration.start_timestamp) }} – {{ dateLabel(nextPeriod.report.calibration.end_timestamp) }}.
               {{ describeParameters(nextPeriod.report.final_selection?.selected_parameters?.params ?? {}) }}.
               Uses the newest data, including the former holdout. This NEW setup has no later validation; the earlier holdout verdict applies only to the earlier setup. Recalibrate after the next {{ validation.stepDays }} days with new closed candles.
-              <details><summary>All next-period parameters</summary><dl><template v-for="(value, key) in nextPeriod.report.final_selection?.selected_parameters?.params" :key="key"><dt>{{ String(key).replaceAll('_', ' ') }}</dt><dd>{{ formatBaseValue(value) }}</dd></template></dl></details>
+              <details class="parameter-details"><summary>All next-period parameters</summary><div class="parameter-scroll"><table><thead><tr><th>Parameter</th><th>Latest setup (not validated on later data)</th></tr></thead><tbody><tr v-for="(value, key) in nextPeriod.report.final_selection?.selected_parameters?.params" :key="key"><th scope="row">{{ String(key).replaceAll('_', ' ') }}</th><td>{{ formatBaseValue(value) }}</td></tr></tbody></table></div></details>
               <button type="button" class="research-secondary" @click="openCandidateInBacktest(true)">Inspect latest setup in Backtest</button>
             </div>
             <div v-if="autoMonte" class="research-inline-notice">
@@ -1489,7 +1489,14 @@ onActivated(() => {
           <div v-if="activeReport?.report?.walk_forward" class="research-card-body">
             <div v-if="activeReport?.report?.calibration" class="research-inline-notice">Calibration: {{ dateLabel(activeReport.report.calibration.start_timestamp) }} – {{ dateLabel(activeReport.report.calibration.end_timestamp) }}. Ranking values cover the research period, not an untouched test.</div>
             <div v-if="recommendedAutoSelection?.neighborhood" class="research-inline-notice">Nearby settings on calibration data: {{ recommendedAutoSelection.neighborhood.profitable }}/{{ recommendedAutoSelection.neighborhood.evaluated }} profitable, {{ recommendedAutoSelection.neighborhood.accepted }} pass the training rules; median P&amp;L {{ number(recommendedAutoSelection.neighborhood.median_net_profit) }} USDT. Final selection favors median neighboring training score. This checks local sensitivity in training, not future performance.</div>
-            <details v-if="parameterDetails.length" class="research-inline-notice"><summary>All selected parameters</summary><dl><template v-for="[key, value] in parameterDetails" :key="key"><dt>{{ key.replaceAll('_', ' ') }}</dt><dd>{{ formatBaseValue(value) }}<span v-if="activeReport?.report?.incumbent && JSON.stringify(value) !== JSON.stringify(activeReport.report.incumbent.parameters.params[key])"> (existing: {{ formatBaseValue(activeReport.report.incumbent.parameters.params[key]) }})</span></dd></template></dl></details>
+            <details v-if="parameterDetails.length" class="research-inline-notice parameter-details"><summary>All selected parameters</summary>
+              <p>Selected setup compared with the original Backtest setup. Highlighted rows differ. Inactive settings are retained for reproducibility.</p>
+              <div class="parameter-scroll"><table><thead><tr><th>Parameter</th><th>Selected</th><th>Original Backtest</th></tr></thead><tbody>
+                <tr v-for="[key, value] in parameterDetails" :key="key" :class="{ changed: activeReport?.report?.incumbent && JSON.stringify(value) !== JSON.stringify(activeReport.report.incumbent.parameters.params[key]) }">
+                  <th scope="row">{{ key.replaceAll('_', ' ') }}</th><td>{{ formatBaseValue(value) }}</td><td>{{ activeReport?.report?.incumbent ? formatBaseValue(activeReport.report.incumbent.parameters.params[key]) : '—' }}</td>
+                </tr>
+              </tbody></table></div>
+            </details>
             <button v-if="parameterDetails.length" type="button" class="research-secondary" @click="openCandidateInBacktest()">Open selected setup in Backtest (same research dates)</button>
             <div v-if="researchMode === 'automatic' && recommendedAutoSelection?.selected_parameters && candidates.every((candidate) => !candidate.eligible)" class="research-inline-notice">
               None of the broad starting points passed the research-period filters. Refinement found the current setup shown below; the numbered rows remain visible as starting-point evidence.
@@ -1612,3 +1619,15 @@ onActivated(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.parameter-details summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
+.parameter-scroll { overflow-x: auto; max-height: 540px; margin-top: 12px; }
+.parameter-details table { width: 100%; border-collapse: collapse; text-align: left; }
+.parameter-details th, .parameter-details td { padding: 9px 12px; border-bottom: 1px solid #2d4755; overflow-wrap: anywhere; }
+.parameter-details thead th { position: sticky; top: 0; background: #172e3b; z-index: 1; }
+.parameter-details tbody th { font-weight: 500; text-transform: capitalize; width: 44%; }
+.parameter-details tbody tr:nth-child(even) { background: #ffffff04; }
+.parameter-details tr.changed td:nth-child(2) { color: #6ac7ff; font-weight: 700; background: #1b456044; }
+.parameter-details td { font-variant-numeric: tabular-nums; }
+</style>

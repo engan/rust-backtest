@@ -147,10 +147,14 @@ const drawdownVerdict = computed(() => {
     return 'Limited final holdout evidence'
   if (summary.sourceTrades < evidence.minimumSourceTrades) return 'Insufficient trade evidence'
   if (evidence.primary !== 'walk_forward_oos') return 'Re-run with walk-forward evidence'
+  if (summary.netProfit.p50 <= 0 || summary.probabilityOfLoss >= 0.5)
+    return 'Unfavorable simulated outcome'
   if (summary.probabilityOfRuin >= 0.05 || summary.drawdown.p95 >= 40)
     return 'Tail risk requires changes'
   if (summary.probabilityOfLoss >= 0.3 || summary.drawdown.p95 >= 25)
-    return 'Promising, tail risk needs review'
+    return 'Substantial simulated loss risk — review required'
+  if (fixedCandidateScope.value === 'research_period' && !holdoutEvidence.value)
+    return 'Simulation favorable; final validation not established'
   return 'Favorable under these assumptions'
 })
 
@@ -572,6 +576,7 @@ onActivated(() => {
                 </dd>
               </div>
             </dl>
+            <p v-if="evidence.primary === 'walk_forward_oos'" class="research-inline-notice">The primary Monte Carlo result tests the method’s walk-forward selection process, which may use different parameters in each window. Selecting another rank changes the supplementary fixed-candidate test; it does not create an independent test of that rank.</p>
             <div class="research-button-row" style="margin-top: 1rem">
               <button class="research-secondary" type="button" @click="router.push('/optimize')">
                 Choose another candidate
@@ -841,7 +846,7 @@ onActivated(() => {
                   ><strong>{{ summary.simulations ? summary.simulations.toLocaleString('en-US') : '—' }}</strong>
                 </div>
               </div>
-              <div v-if="summary.simulations" class="verdict" :class="{ 'verdict--warning': holdoutEvidence && (holdoutEvidence.pnl <= 0 || holdoutEvidence.trades < 30) }">{{ drawdownVerdict }}</div>
+              <div v-if="summary.simulations" class="verdict" :class="{ 'verdict--warning': drawdownVerdict !== 'Favorable under these assumptions' }">{{ drawdownVerdict }}</div>
             </div>
           </section>
         </div>
