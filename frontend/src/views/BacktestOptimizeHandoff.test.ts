@@ -34,6 +34,7 @@ const result = {
 
 beforeEach(() => {
   sessionStorage.clear()
+  localStorage.clear()
   mocks.runBacktest.mockResolvedValue(result)
   mocks.fetchSymbolFilters.mockResolvedValue({ tickSize: 0.01, stepSize: 0.001 })
 })
@@ -237,4 +238,24 @@ describe('Open in Optimize', () => {
     expect((wrapper.get('#research-bars').element as HTMLInputElement).value).toBe('4321')
     wrapper.unmount()
   })
+})
+
+it('starts research from a calendar profile without running a manual backtest', async () => {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: DashboardView }, { path: '/optimize', component: { template: '<div />' } }] })
+  await router.push('/'); await router.isReady()
+  const wrapper = mount(DashboardView, { global: { plugins: [router], stubs: { PnlChart: true, FieldTooltip: true } } })
+  await wrapper.get('#strategy').setValue('emaVwap')
+  await wrapper.get('#timeframe').setValue('1h')
+  await wrapper.get('#end-before').setValue('2026-09-25T10:00')
+  await wrapper.get('#start-history').setValue('12')
+  const button = (text: string) => wrapper.findAll('button').find(b => b.text() === text)!
+  await button('Save simulation profile').trigger('click')
+  await wrapper.get('#initial-capital').setValue('12345')
+  await button('Load profile: My simulation').trigger('click')
+  expect((wrapper.get('#initial-capital').element as HTMLInputElement).value).toBe('10000')
+  await button('Find and assess setup').trigger('click'); await flushPromises()
+  expect(mocks.runBacktest).not.toHaveBeenCalled()
+  expect(router.currentRoute.value.path).toBe('/optimize')
+  expect(consumeResearchHandoff()?.market).toEqual({ symbol: 'SOLUSDT', timeframe: '1h', dataLimit: 8760, endBeforeUtc: '2026-09-25T10:00' })
+  wrapper.unmount()
 })

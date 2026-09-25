@@ -15,7 +15,7 @@ export type AutoFamilyGrid = {
   candidateCount: number
   parameterGrid: {
     base: { strategy: 'ema_vwap' | 'sma_crossover'; params: Record<string, unknown> }
-    axes: Array<{ parameter: string; values: Array<number | string> }>
+    axes: Array<{ parameter: string; values: Array<number | string | boolean> }>
     max_candidates: number
   }
 }
@@ -47,7 +47,7 @@ export const createAutoFamilyGrids = (
   const axes = chosen.map((id) => {
     const axis = relevant.find((item) => item.id === id)
     if (!axis) throw new Error(`Automatic search cannot find ${id} for ${method}.`)
-    let values: Array<number | string>
+    let values: Array<number | string | boolean>
     if (axis.type === 'numeric') {
       values = unique([axis.baseValue, ...(id === 'sma_fast_period' ? [5, 10, 20, 40] : [40, 80, 120, 180, 240])]).sort((a, b) => a - b)
     } else {
@@ -59,6 +59,7 @@ export const createAutoFamilyGrids = (
     }
     return { parameter: id, values }
   })
+  axes.push({ parameter: 'enable_dmi_filter', values: [false, true] })
   const candidateCount = axes.reduce((count, axis) => count * axis.values.length, 1)
   return {
     method,

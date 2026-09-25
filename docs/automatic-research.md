@@ -1,6 +1,20 @@
 # Automatic strategy research
 
-Choose the strategy, symbol, timeframe and dataset, then use **Find robust setups**.
+On Backtest, use **Find and assess a setup**: choose strategy, symbol, timeframe
+and either an exact Dataset or 12/18/24 calendar months. An empty UTC cutoff means
+the newest completed candles. Exact Dataset plus a fixed cutoff remain available
+for TradingView comparisons. Calendar periods are converted to candle counts;
+Optimize shows the available count and actual dates. Very large requests are bounded.
+
+Review the simulation profile once: capital, sizing, gearing, direction, fees,
+slippage, margin and loss safeguards. Save it locally in this browser and use
+**Load profile** on subsequent visits. Loading retains an explicit historical cutoff;
+clear it for fresh research. Profiles exclude signal and exit tuning and are not
+Pionex trading configurations. Risk-based exits use the fixed risk-per-trade setting;
+other exit families use order size. **Find and assess setup** starts research directly.
+Manual Backtest remains available through **Show manual Backtest and all parameters**.
+
+In Optimize you can also use **Find robust setups**.
 **Open in Optimize** carries the current Backtest settings and starts this process.
 The native research service must be running (`npm run dev`). Its first optimized
 Rust build can take a few minutes; subsequent starts reuse that build.
@@ -10,13 +24,13 @@ Rust build can take a few minutes; subsequent starts reuse that build.
 1. Fetch one dataset and reserve its last validation-length period as a final holdout.
 2. Compare all four exit methods. EMA searches broad lengths, every supported price
    source, VWAP anchor/source and entry mode. SMA searches broad fast/slow periods and
-   entry modes. Standard exit starting values avoid depending on a hand-tuned starting
+   entry modes. Every family compares ADX enabled and disabled. Standard exit starting values avoid depending on a hand-tuned starting
    stop or target. The exact existing setup remains a separate benchmark.
 3. Within each training window, select diverse structures, explore coarse exit values,
    and run five bounded refinement rounds. Later rounds keep earlier improvements while
    adjusting signal lengths, exits and relevant entry/filter values. Final beam
    selection favors the median neighboring training score over a single peak. No validation data
-   chooses these parameters. Costs, sizing, direction, drawdown and loss-pause rules remain inherited; active
+   chooses these parameters. Costs, sizing, direction, drawdown and loss-pause rules remain inherited; enabled
    ADX and entry filter values can be refined.
 4. Evaluate each selection on its following validation window. Rank methods on these
    results; this method comparison is model selection, not a final independent test.

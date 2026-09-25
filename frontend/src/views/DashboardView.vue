@@ -13,7 +13,7 @@
         </label>
         <FieldTooltip label="TradingView parity" text="Uses the execution and rounding behavior required to reproduce TradingView strategy results as closely as possible." />
         <button
-          class="backtest-run-button"
+          v-show="manualOpen" class="backtest-run-button"
           type="button"
           :disabled="isLoading"
           @click="runBacktest"
@@ -25,7 +25,53 @@
 
     <div v-if="backtestError" class="research-inline-notice" role="alert">{{ backtestError }}</div>
 
-    <div class="backtest-layout">
+    <section class="research-card research-start">
+      <h2 class="research-card-title">Find and assess a setup</h2>
+      <div class="research-card-body">
+        <p>Choose a strategy and market. Automatic research finds signal, entry, exit and ADX settings; no manual backtest is required first.</p>
+        <div class="start-grid">
+          <label>Strategy<select v-model="selectedStrategy"><option value="emaVwap">EMA / VWAP</option><option value="smaCross">SMA Crossover</option></select></label>
+          <label>Symbol<input v-model="symbol" /></label>
+          <label>Timeframe<select v-model="timeframe"><option v-for="iv in BINANCE_INTERVALS" :key="iv" :value="iv">{{ iv }}</option></select></label>
+          <label>History<select id="start-history" v-model="historyChoice"><option value="exact">Exact Dataset (TradingView)</option><option value="12">Last 12 months</option><option value="18">Last 18 months</option><option value="24">Last 24 months</option></select></label>
+          <label v-if="historyChoice === 'exact'">Dataset<input v-model.number="dataLimitForFetch" type="number" min="100" /></label>
+          <label>End before (UTC; blank = latest)<input v-model="endBeforeUtc" type="datetime-local" /></label>
+        </div>
+        <p>{{ historyDescription }} · Binance market data. Use the same interval and cutoff for TradingView comparisons.</p>
+        <details>
+          <summary>Simulation profile — review capital, costs and risk limits</summary>
+          <p>These limits stay fixed during the search. Risk-based exits use Risk per trade; other exits use Order size. This is a simulation profile, not a Pionex execution configuration.</p>
+          <div class="start-grid">
+            <label>Profile name<input v-model="profileName" /></label>
+            <label>Initial capital<input v-model.number="initialCapital" type="number" min="1" /></label>
+            <label>Commission %<input v-model.number="commissionPercent" type="number" min="0" step="0.01" /></label>
+            <label>Slippage ticks<input v-model.number="slippageTicks" type="number" min="0" /></label>
+            <label>Trading direction<select v-model="activeParams.trade_direction"><option :value="TradeDirectionFilter.Long">Long</option><option :value="TradeDirectionFilter.Short">Short</option><option :value="TradeDirectionFilter.Both">Both</option></select></label>
+            <label>Gearing<select v-model="activeParams.risk_gearing"><option v-for="n in 5" :key="n" :value="n">{{ n }}×</option></select></label>
+            <label>Order size<input v-model.number="activeParams.order_size_value" type="number" min="0.01" /></label>
+            <label>Order size unit<select v-model="activeParams.order_size_mode"><option :value="OrderSizeMode.PercentOfEquity">% equity</option><option :value="OrderSizeMode.FixedQuantity">Quantity</option><option :value="OrderSizeMode.FixedValue">USDT</option></select></label>
+            <label>Risk per trade %<input v-model.number="activeParams.risk_perc" type="number" min="0.01" step="0.1" /></label>
+            <label><span><input v-model="activeParams.enable_max_drawdown" type="checkbox" /> Drawdown safeguard</span><input v-model.number="activeParams.max_drawdown_perc" aria-label="Profile drawdown percent" type="number" min="0.1" /></label>
+            <label><span><input v-model="activeParams.enable_max_consecutive_losses" type="checkbox" /> Loss streak safeguard</span><input v-model.number="activeParams.max_consecutive_losses" aria-label="Profile maximum losses" type="number" min="1" /></label>
+            <label>Cooldown bars<input v-model.number="activeParams.cooldown_bars" type="number" min="0" /></label>
+            <label><input v-model="marginEnforcementEnabled" type="checkbox" /> Simulate margin calls</label>
+            <label>Long margin %<input v-model.number="marginLongPercent" type="number" min="0" /></label>
+            <label>Short margin %<input v-model.number="marginShortPercent" type="number" min="0" /></label>
+            <label><input v-model="priceToTick" type="checkbox" /> Round to exchange tick</label>
+          </div>
+          <button class="research-secondary" type="button" @click="saveSimulationProfile">Save simulation profile</button>
+        </details>
+        <p>Current limits: {{ initialCapital }} {{ quoteCurrency }} · {{ activeParams.trade_direction }} · {{ activeParams.risk_gearing }}× · commission {{ commissionPercent }}% · slippage {{ slippageTicks }} ticks. Review the profile before your first run.</p>
+        <div class="research-button-row">
+          <button class="research-primary" type="button" :disabled="isLoading || !!historyError" @click="startResearch">Find and assess setup</button>
+          <button v-if="savedProfile" class="research-secondary" type="button" @click="loadSimulationProfile">Load profile: {{ savedProfile.name }}</button>
+          <button class="research-secondary" type="button" @click="manualOpen = !manualOpen">{{ manualOpen ? 'Hide manual Backtest' : 'Show manual Backtest and all parameters' }}</button>
+        </div>
+        <p role="status">{{ profileMessage || historyError }}</p>
+      </div>
+    </section>
+
+    <div v-show="manualOpen" class="backtest-layout">
       <div class="backtest-column">
         <section class="research-card">
           <h2 class="research-card-title">Strategy &amp; Market</h2>
@@ -856,7 +902,8 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, nextTick, onActivated } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
+import { historyBars, makeProfile, readProfile, PROFILE_KEY, fixedFields } from '@/services/researchStart'
 import { useBacktest } from '@/composables/useBacktest'
 import { fetchSymbolFilters } from '@/services/binanceAPI'
 import PnlChart from '@/components/PnlChart.vue'
@@ -1230,6 +1277,46 @@ console.log('params.sma:', JSON.stringify(smaParams))
 // Manuelt Data Limit (ingen auto-beregning)
 const dataLimitForFetch = ref<number>(10000)
 const endBeforeUtc = ref('')
+const router = useRouter()
+const manualOpen = ref(false)
+const historyChoice = ref('exact')
+const profileName = ref('My simulation')
+const profileMessage = ref('')
+const savedProfile = ref(readProfile())
+const historyError = computed(() => { try { if (historyChoice.value !== 'exact') historyBars(Number(historyChoice.value), timeframe.value, endBeforeUtc.value); return '' } catch (e) { return String((e as Error).message) } })
+const historyDescription = computed(() => historyError.value || (historyChoice.value === 'exact'
+  ? `${dataLimitForFetch.value} candles requested`
+  : `${historyBars(Number(historyChoice.value), timeframe.value, endBeforeUtc.value).toLocaleString()} closed candles requested; actual available dates are shown in Optimize`))
+const saveSimulationProfile = () => {
+  try {
+    const profile = makeProfile(profileName.value, captureCurrentBacktestSettings(), historyChoice.value)
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile))
+    savedProfile.value = profile
+    profileMessage.value = 'Profile saved on this browser. Signal and exit parameters are not stored in the profile.'
+  } catch { profileMessage.value = 'The browser could not save this profile. You can still run research.' }
+}
+const loadSimulationProfile = () => {
+  const profile = savedProfile.value
+  if (!profile) return
+  const { market, execution, parameters } = profile.settings
+  selectedStrategy.value = profile.settings.strategy === 'smaCross' ? 'smaCross' : 'emaVwap'
+  symbol.value = market.symbol; timeframe.value = market.timeframe as typeof timeframe.value
+  dataLimitForFetch.value = market.dataLimit; endBeforeUtc.value = market.endBeforeUtc || ''
+  for (const key of fixedFields) if (parameters[key] !== undefined) Object.assign(activeParams.value, { [key]: parameters[key] })
+  initialCapital.value = execution.initialCapital; commissionPercent.value = execution.commissionPercent
+  slippageTicks.value = execution.slippageTicks; priceToTick.value = execution.priceToTick ?? false
+  marginEnforcementEnabled.value = execution.marginEnforcementEnabled ?? false
+  marginLongPercent.value = execution.marginLongPercent ?? 100; marginShortPercent.value = execution.marginShortPercent ?? 100
+  profileName.value = profile.name; historyChoice.value = profile.history
+  profileMessage.value = 'Profile loaded. Check the cutoff: leave it empty for new market data.'
+}
+const startResearch = () => {
+  if (historyError.value) return
+  if (historyChoice.value !== 'exact') dataLimitForFetch.value = historyBars(Number(historyChoice.value), timeframe.value, endBeforeUtc.value)
+  saveResearchHandoff(captureCurrentBacktestSettings())
+  void router.push('/optimize')
+}
+
 
 function showPreset() {
   if (!tvPreset.value) {
@@ -1277,6 +1364,7 @@ const captureCurrentBacktestSettings = (): Omit<BacktestAnalysisSnapshot, 'resul
 onActivated(() => {
   const handoff = consumeBacktestHandoff()
   if (!handoff) return
+  manualOpen.value = true
   selectedStrategy.value = handoff.strategy === 'smaCross' ? 'smaCross' : 'emaVwap'
   Object.assign(activeParams.value, handoff.parameters)
   symbol.value = handoff.market.symbol
@@ -2616,4 +2704,13 @@ tr > td:nth-child(4)  /* Date/Time */ {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+</style>
+
+<style scoped>
+.research-start { margin-bottom: 20px; }
+.start-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 16px 0; }
+.start-grid label { display: flex; flex-direction: column; gap: 6px; }
+.start-grid input:not([type=checkbox]), .start-grid select { width: 100%; min-height: 36px; box-sizing: border-box; }
+.start-grid input[type=checkbox] { width: 18px; height: 18px; min-width: 18px; min-height: 18px; padding: 0; margin: 0 6px 0 0; }
+.research-start summary { cursor: pointer; color: var(--text-primary, #abcde4); padding: 10px 0; }
 </style>

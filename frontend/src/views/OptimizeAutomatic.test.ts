@@ -99,6 +99,8 @@ describe('one-click automatic optimization', () => {
     expect(mocks.createMonteCarloJob).toHaveBeenCalledOnce()
     expect(mocks.createMonteCarloJob.mock.calls[0]?.[0].sourceResearchJobId).toBe('research-FixedPercent')
     expect(mocks.createMonteCarloJob.mock.calls[0]?.[0].fixedCandidateScope).toBe('research_period')
+    expect(wrapper.get('[aria-label="Research assessment"]').text()).toContain('Final period did not confirm the setup')
+    expect(mocks.createResearchJob.mock.calls[0]?.[0].parameterGrid.axes).toContainEqual({ parameter: 'enable_dmi_filter', values: [false, true] })
     expect(mocks.createMonteCarloJob.mock.calls[0]?.[0].holdoutEvidence)
       .toMatchObject({ jobId: 'holdout', trades: 4, pnl: -200 })
     expect(wrapper.get('.auto-results-table').text()).toContain('Fixed %')

@@ -160,6 +160,18 @@ const rankedAutoFamilies = computed(() => {
   return rankAutoFamilies(completed.map((family) => family.evidence))
     .map((evidence) => completed.find((family) => family.method === evidence.method)!)
 })
+const outcome = computed(() => {
+  if (isRunning.value) return { title: 'Research in progress', detail: 'The final assessment appears after the independent checks. Intermediate rankings are not a recommendation.' }
+  if (!autoFamilies.value.length) return null
+  if (autoFamilies.value.some(f => f.status !== 'completed')) return { title: 'Research incomplete', detail: 'One or more methods did not complete. Review the run message before comparing setups.' }
+  if (!rankedAutoFamilies.value.some(f => f.evidence.eligible)) return { title: 'No setup passed the evidence checks', detail: 'Do not interpret the highest historical return as an approved replacement. Inspect trade counts and validation results below.' }
+  const h = autoHoldout.value
+  if (!h) return { title: 'Final validation incomplete', detail: 'A promising walk-forward result alone does not complete this assessment.' }
+  if (h.pnl <= 0) return { title: 'Final period did not confirm the setup', detail: 'The selected setup lost money in the untouched final period. Monte Carlo does not override this result.' }
+  if (h.trades < 30) return { title: 'Not enough final-period evidence', detail: `The final period contains only ${h.trades} trades. Keep the result for observation; replacement is not established.` }
+  if (h.drawdown > (autoMarket.value?.assessmentMaxDrawdown ?? validation.maximumDrawdown)) return { title: 'Final-period risk needs review', detail: 'Drawdown exceeded the selected validation threshold.' }
+  return { title: 'Promising setup for further observation', detail: 'Walk-forward and final-period checks are positive. Compare risk, neighboring settings and the existing setup below. The separately recalibrated latest setup has no later validation yet.' }
+})
 const recommendedAutoFamily = computed(() => rankedAutoFamilies.value.find((family) => family.evidence.eligible) ?? null)
 const autoCandidateTotal = computed(() => {
   try { return createAutoFamilyGrids(setup.strategy, baseParams.value).reduce((sum, family) => sum + family.candidateCount, 0) }
@@ -175,7 +187,7 @@ const setup = reactive({
   maxCandidates: 100000,
 })
 
-const autoMarket = ref<typeof setup | null>(null)
+const autoMarket = ref<(typeof setup & { actualHistory?: string; assessmentMaxDrawdown?: number }) | null>(null)
 
 const execution = reactive({
   initialCapital: 10000,
@@ -698,7 +710,7 @@ const runAutomaticResearch = async () => {
   }
 
   const currentSetup = { ...setup }
-  autoMarket.value = { ...setup }
+  autoMarket.value = { ...setup, assessmentMaxDrawdown: validation.maximumDrawdown }
   const incumbent = { strategy: setup.strategy === 'EMA / VWAP' ? 'ema_vwap' : 'sma_crossover', params: JSON.parse(JSON.stringify(baseParams.value)) }
   const currentExecution = { ...execution }
   const currentValidation = { ...validation, method: 'Rolling walk-forward' }
@@ -737,6 +749,7 @@ const runAutomaticResearch = async () => {
       fetchBinanceKlines(currentSetup.symbol, currentSetup.timeframe, currentSetup.dataset, endTime),
       fetchSymbolFilters(currentSetup.symbol),
     ])
+    if (autoMarket.value && klines.length) autoMarket.value.actualHistory = `${klines.length.toLocaleString()} closed candles available: ${new Date(klines[0]!.timestamp).toISOString()} – ${new Date(klines[klines.length - 1]!.timestamp).toISOString()}. Requested ${currentSetup.dataset.toLocaleString()}.`
     const minimumBars = trainBars + 2 * validateBars + stepBars
     if (klines.length < minimumBars) {
       throw new Error(`The dataset has ${number(klines.length)} candles; at least ${number(minimumBars)} are needed for two walk-forward windows and a separate final holdout. Increase Dataset or shorten the windows.`)
@@ -1102,6 +1115,11 @@ onActivated(() => {
       <span class="research-status-badge">{{ reportLabel }}</span>
     </header>
 
+    <section v-if="researchMode === 'automatic' && outcome" class="research-card" aria-label="Research assessment">
+      <h2 class="research-card-title">{{ outcome.title }}</h2>
+      <div class="research-card-body"><p>{{ outcome.detail }}</p><p v-if="autoMarket?.actualHistory">{{ autoMarket.actualHistory }}</p>
+      <p v-if="nextPeriod">The tested setup and the latest-period setup are separate. Use the Backtest buttons below to inspect either one.</p></div>
+    </section>
     <div class="research-mode-switch" role="group" aria-label="Optimization mode">
       <button type="button" :class="{ active: researchMode === 'automatic' }" :disabled="isRunning" @click="researchMode = 'automatic'">Automatic comparison</button>
       <button type="button" :class="{ active: researchMode === 'manual' }" :disabled="isRunning" @click="researchMode = 'manual'">Manual search</button>
@@ -1237,7 +1255,7 @@ onActivated(() => {
           <h2 class="research-card-title">Automatic strategy comparison <small>Four SL/TP methods</small></h2>
           <div class="research-card-body">
             <p class="research-axis-intro">One run compares four SL/TP methods using broad strategy-specific ranges, independent of your starting exits, then five rounds of training-only refinement. Your Backtest setup is retained as a benchmark. The latest period is reserved for a final check; Monte Carlo follows automatically when there are enough trades.</p>
-            <p class="research-axis-intro">{{ number(autoCandidateTotal) }} broad candidates in total, plus bounded training-only refinements · starting settings from {{ baseSettingsSource }}. Costs, sizing, direction, drawdown and loss-pause rules stay fixed. Active ADX and entry parameters can be refined. More candidates take longer; candidate and refinement limits bound the work.</p>
+            <p class="research-axis-intro">{{ number(autoCandidateTotal) }} broad candidates in total, plus bounded training-only refinements · starting settings from {{ baseSettingsSource }}. Costs, sizing, direction, drawdown and loss-pause rules stay fixed. ADX is compared both on and off; enabled ADX and entry parameters are refined. More candidates take longer; candidate and refinement limits bound the work.</p>
             <div class="research-button-row">
               <button class="research-primary" type="button" :disabled="isRunning || autoCandidateTotal < 1" @click="runAutomaticResearch">
                 {{ isRunning ? 'Running automatic comparison…' : '▶ Find robust setups' }}
@@ -1477,7 +1495,7 @@ onActivated(() => {
               None of the broad starting points passed the research-period filters. Refinement found the current setup shown below; the numbered rows remain visible as starting-point evidence.
             </div>
             <div v-if="recommendedAutoSelection?.selected_parameters" class="research-inline-notice">
-              <strong>{{ activeReport?.report?.calibration ? 'Setup calibrated before the holdout:' : 'Setup selected on the research period:' }}</strong> {{ describeParameters(recommendedAutoSelection.selected_parameters.params ?? {}) }}. {{ activeReport?.report?.calibration ? 'It was chosen on the latest training window before the holdout;' : 'This older report selected it on the complete research period;' }} the separate final-period result above checks it on later data. Click a numbered row to inspect another research-period candidate.
+              <strong>{{ activeReport?.report?.calibration ? 'Setup calibrated before the holdout:' : 'Setup selected on the research period:' }}</strong> {{ describeParameters(recommendedAutoSelection.selected_parameters.params ?? {}) }}. {{ activeReport?.report?.calibration ? 'It was chosen on the latest training window before the holdout;' : 'This older report selected it on the complete research period;' }} {{ autoHoldout && selectedAutoMethod === autoHoldout.method ? 'the separate final-period result above checks it on later data.' : 'no separate final-period result is available for this setup.' }} Click a numbered row to inspect another research-period candidate.
             </div>
             <div class="research-summary-line">
               <span>Walk-forward selection · compounded OOS equity P&amp;L</span>

@@ -16,9 +16,10 @@ describe('automatic strategy research', () => {
     const families = createAutoFamilyGrids(strategy, base)
     expect(families.map((family) => family.method))
       .toEqual(['RiskBased', 'FixedPercent', 'TrailingPercent', 'Combined'])
-    expect(families.every((family) => family.candidateCount > 1 && family.candidateCount <= 3000)).toBe(true)
+    expect(families.every((family) => family.candidateCount > 1 && family.candidateCount <= 6000)).toBe(true)
     for (const family of families) {
       expect(family.parameterGrid.base.params.sl_tp_method).toBe(family.method)
+      expect(family.parameterGrid.axes.find(a => a.parameter === 'enable_dmi_filter')?.values).toEqual([false, true])
       expect(family.parameterGrid.base.params.risk_gearing).toBe(1)
       expect(family.parameterGrid.base.params.max_drawdown_perc).toBe(22)
       expect(family.parameterGrid.max_candidates).toBe(family.candidateCount)
